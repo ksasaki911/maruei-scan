@@ -22,6 +22,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 /* スキャンエリア */
 .scan-area{background:#000;position:relative;overflow:hidden}
 .scan-area video{width:100%;display:block}
+#qr-reader{width:100%!important}
+#qr-reader video{width:100%!important;object-fit:cover}
+#qr-reader__dashboard{padding:8px!important}
+#qr-reader__dashboard button{background:#1e40af!important;color:#fff!important;border:none!important;padding:8px 16px!important;border-radius:6px!important;font-size:14px!important}
 .scan-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;max-width:300px;height:100px;border:3px solid #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.4)}
 .scan-line{position:absolute;top:0;left:5%;width:90%;height:2px;background:#00e676;animation:scanMove 1.5s ease-in-out infinite}
 @keyframes scanMove{0%,100%{top:10%}50%{top:90%}}
@@ -132,11 +136,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <button onclick="startCamera()">カメラ起動</button>
     </div>
     <div class="scan-area hidden" id="cameraOn">
-      <video id="scanVideo" playsinline autoplay muted></video>
-      <div class="scan-overlay">
-        <div class="scan-line"></div>
-      </div>
-      <div class="scan-hint">バーコードを枠内に合わせてください</div>
+      <div id="qr-reader" style="width:100%"></div>
+      <div class="scan-hint" id="scanHint">バーコードを枠内に合わせてください</div>
     </div>
 
     <div class="manual-input">
@@ -254,77 +255,72 @@ function onStoreChange() {
   if (currentJan) loadHistory(currentJan);
 }
 
-// ===== カメラ起動 =====
+// ===== カメラ起動（html5-qrcode ライブラリ使用）=====
 function startCamera() {
   document.getElementById('cameraOff').classList.add('hidden');
   document.getElementById('cameraOn').classList.remove('hidden');
 
-  const video = document.getElementById('scanVideo');
-  navigator.mediaDevices.getUserMedia({
-    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-  }).then(stream => {
-    video.srcObject = stream;
-    cameraActive = true;
-    startBarcodeDetection(video);
-  }).catch(err => {
+  if (html5QrCode) {
+    try { html5QrCode.stop().catch(() => {}); } catch(e) {}
+  }
+
+  html5QrCode = new Html5Qrcode("qr-reader");
+  cameraActive = true;
+
+  const config = {
+    fps: 10,
+    qrbox: { width: 280, height: 120 },
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.CODE_39
+    ]
+  };
+
+  html5QrCode.start(
+    { facingMode: "environment" },
+    config,
+    (decodedText, decodedResult) => {
+      if (decodedText && decodedText.length >= 8) {
+        onBarcodeDetected(decodedText);
+      }
+    },
+    (errorMessage) => { /* 読取失敗は無視 */ }
+  ).catch(err => {
     console.error('Camera error:', err);
     document.getElementById('cameraOff').classList.remove('hidden');
     document.getElementById('cameraOn').classList.add('hidden');
+    cameraActive = false;
     alert('カメラにアクセスできません。手動入力をご利用ください。');
   });
 }
 
-function startBarcodeDetection(video) {
-  if ('BarcodeDetector' in window) {
-    // ネイティブ BarcodeDetector API（Chrome Android対応）
-    const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a'] });
-    const detect = async () => {
-      if (!cameraActive) return;
-      try {
-        const barcodes = await detector.detect(video);
-        if (barcodes.length > 0) {
-          const code = barcodes[0].rawValue;
-          if (code && code.length >= 8) {
-            onBarcodeDetected(code);
-            await new Promise(r => setTimeout(r, 1500));
-          }
-        }
-      } catch (e) {}
-      if (cameraActive) requestAnimationFrame(detect);
-    };
-    detect();
-  } else {
-    // フォールバック: canvasベースの簡易検出
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    const scanLoop = () => {
-      if (!cameraActive) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0);
-      // BarcodeDetector非対応の場合は手動入力を促す
-      setTimeout(scanLoop, 500);
-    };
-    if (video.readyState >= 2) scanLoop();
-    else video.onloadeddata = scanLoop;
-    // 手動入力を促すヒント表示
-    document.querySelector('.scan-hint').textContent = 'お使いのブラウザではカメラ読取に非対応です。下のJAN入力欄をご利用ください';
-  }
-}
+let lastScannedCode = '';
+let lastScannedTime = 0;
 
 function onBarcodeDetected(code) {
+  // 連続スキャン防止（同じコードは2秒間無視）
+  const now = Date.now();
+  if (code === lastScannedCode && now - lastScannedTime < 2000) return;
+  lastScannedCode = code;
+  lastScannedTime = now;
+
   // 振動フィードバック
   if (navigator.vibrate) navigator.vibrate(100);
   document.getElementById('janInput').value = code;
+  document.getElementById('scanHint').textContent = '読取成功: ' + code;
   searchProduct();
 }
 
 function stopCamera() {
   cameraActive = false;
-  const video = document.getElementById('scanVideo');
-  if (video.srcObject) {
-    video.srcObject.getTracks().forEach(t => t.stop());
-    video.srcObject = null;
+  if (html5QrCode) {
+    html5QrCode.stop().then(() => {
+      html5QrCode.clear();
+    }).catch(err => console.error('Stop error:', err));
   }
 }
 
