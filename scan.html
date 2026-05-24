@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#1a237e">
+<link rel="manifest" href="/manifest.json">
+<title>マルエー商品スキャン</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{--pri:#1a237e;--pri2:#283593;--bg:#f5f5f5;--card:#fff;--txt:#212121;--txt2:#757575;--green:#2e7d32;--red:#c62828;--blue:#1565c0;--amber:#f57f17;--border:#e0e0e0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;-webkit-text-size-adjust:100%}
+
+/* ヘッダー */
+.header{background:var(--pri);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header h1{font-size:16px;font-weight:600;letter-spacing:.5px}
+.header .store-sel{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 8px;font-size:12px}
+.header .store-sel option{color:#000;background:#fff}
+
+/* スキャンエリア */
+.scan-area{background:#000;position:relative;overflow:hidden}
+.scan-area video{width:100%;display:block}
+.scan-overlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70%;max-width:300px;height:100px;border:3px solid #00e676;border-radius:8px;box-shadow:0 0 0 9999px rgba(0,0,0,.4)}
+.scan-line{position:absolute;top:0;left:5%;width:90%;height:2px;background:#00e676;animation:scanMove 1.5s ease-in-out infinite}
+@keyframes scanMove{0%,100%{top:10%}50%{top:90%}}
+.scan-hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+
+/* 手動入力 */
+.manual-input{display:flex;gap:8px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
+.manual-input input{flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:16px;outline:none}
+.manual-input input:focus{border-color:var(--pri)}
+.manual-input button{background:var(--pri);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;white-space:nowrap}
+
+/* 商品情報カード */
+.product-card{margin:12px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
+.product-header{background:var(--pri2);color:#fff;padding:14px 16px}
+.product-header .jan{font-size:12px;opacity:.8;margin-bottom:2px;font-family:monospace;letter-spacing:1px}
+.product-header .name{font-size:18px;font-weight:700;line-height:1.3}
+.product-header .spec{font-size:13px;opacity:.8;margin-top:2px}
+
+.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)}
+.info-cell{padding:12px;text-align:center;border-right:1px solid var(--border)}
+.info-cell:last-child{border-right:none}
+.info-cell .label{font-size:11px;color:var(--txt2);margin-bottom:4px}
+.info-cell .value{font-size:18px;font-weight:700}
+.info-cell .value.price{color:var(--red)}
+.info-cell .value.cost{color:var(--blue)}
+.info-cell .value.margin{color:var(--green)}
+
+.detail-rows{padding:0 16px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:14px}
+.detail-row:last-child{border-bottom:none}
+.detail-row .dl{color:var(--txt2)}
+.detail-row .dv{font-weight:600}
+
+/* 週別集計 */
+.weekly-section{margin:12px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
+.section-title{padding:12px 16px;font-size:14px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.weekly-grid{display:grid;grid-template-columns:repeat(4,1fr);text-align:center}
+.wk-col{border-right:1px solid var(--border);padding:10px 4px}
+.wk-col:last-child{border-right:none}
+.wk-col .wh{font-size:11px;color:var(--txt2);margin-bottom:6px}
+.wk-col .wv{font-size:16px;font-weight:700}
+.wk-col .wa{font-size:12px;color:var(--txt2);margin-top:2px}
+
+/* 日別テーブル */
+.daily-table{width:100%;border-collapse:collapse;font-size:13px}
+.daily-table th{background:#f5f5f5;padding:8px 6px;text-align:center;font-size:11px;color:var(--txt2);font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0}
+.daily-table td{padding:7px 6px;text-align:right;border-bottom:1px solid #f5f5f5}
+.daily-table td:first-child{text-align:left;font-family:monospace;font-size:12px}
+.daily-table tr:nth-child(even){background:#fafafa}
+
+/* 店舗別タブ */
+.store-tabs{display:flex;gap:4px;padding:8px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.store-tab{padding:6px 12px;border-radius:16px;font-size:12px;white-space:nowrap;border:1px solid var(--border);background:var(--card);color:var(--txt2);cursor:pointer}
+.store-tab.active{background:var(--pri);color:#fff;border-color:var(--pri)}
+
+/* ステータス */
+.status-bar{padding:16px;text-align:center;color:var(--txt2);font-size:13px}
+.not-found{margin:40px 16px;text-align:center;padding:32px;background:var(--card);border-radius:12px}
+.not-found .nf-icon{font-size:48px;margin-bottom:12px}
+.not-found .nf-text{font-size:16px;font-weight:600;margin-bottom:4px}
+.not-found .nf-sub{font-size:13px;color:var(--txt2)}
+
+/* Bottom nav */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;padding:6px 0;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:100}
+.bottom-nav .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;font-size:10px;color:var(--txt2);background:none;border:none}
+.bottom-nav .nav-btn.active{color:var(--pri)}
+.bottom-nav .nav-btn .icon{font-size:22px}
+.content{padding-bottom:70px}
+
+/* カメラOFF時 */
+.camera-off{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px;background:#1a1a2e;color:#fff}
+.camera-off .cam-icon{font-size:48px;margin-bottom:12px;opacity:.6}
+.camera-off button{background:#00e676;color:#000;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:600;margin-top:12px}
+
+/* 統計ページ */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px}
+.stat-card{background:var(--card);border-radius:12px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.stat-card .sv{font-size:24px;font-weight:700;color:var(--pri)}
+.stat-card .sl{font-size:12px;color:var(--txt2);margin-top:4px}
+
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>マルエー商品スキャン</h1>
+  <select class="store-sel" id="storeSelect" onchange="onStoreChange()">
+    <option value="">全店</option>
+    <option value="5">本店</option>
+    <option value="6">松縄店</option>
+    <option value="7">仏生山店</option>
+    <option value="8">円座店</option>
+    <option value="9">檀紙店</option>
+    <option value="10">国分寺店</option>
+    <option value="11">香西店</option>
+    <option value="12">太田店</option>
+    <option value="13">飯田店</option>
+  </select>
+</div>
+
+<div class="content" id="mainContent">
+  <!-- スキャンエリア -->
+  <div id="scanSection">
+    <div class="camera-off" id="cameraOff">
+      <div class="cam-icon">📷</div>
+      <div>カメラでバーコードをスキャン</div>
+      <button onclick="startCamera()">カメラ起動</button>
+    </div>
+    <div class="scan-area hidden" id="cameraOn">
+      <video id="scanVideo" playsinline autoplay muted></video>
+      <div class="scan-overlay">
+        <div class="scan-line"></div>
+      </div>
+      <div class="scan-hint">バーコードを枠内に合わせてください</div>
+    </div>
+
+    <div class="manual-input">
+      <input type="tel" id="janInput" placeholder="JANコードを入力" maxlength="13"
+             onkeydown="if(event.key==='Enter')searchProduct()">
+      <button onclick="searchProduct()">検索</button>
+    </div>
+  </div>
+
+  <!-- 結果表示 -->
+  <div id="resultSection" class="hidden">
+    <!-- 商品情報 -->
+    <div class="product-card" id="productCard">
+      <div class="product-header">
+        <div class="jan" id="resJan"></div>
+        <div class="name" id="resName"></div>
+        <div class="spec" id="resSpec"></div>
+      </div>
+      <div class="info-grid">
+        <div class="info-cell">
+          <div class="label">税込売価</div>
+          <div class="value price" id="resTaxPrice">-</div>
+        </div>
+        <div class="info-cell">
+          <div class="label">原価</div>
+          <div class="value cost" id="resCost">-</div>
+        </div>
+        <div class="info-cell">
+          <div class="label">値入率</div>
+          <div class="value margin" id="resMargin">-</div>
+        </div>
+      </div>
+      <div class="detail-rows" id="detailRows"></div>
+    </div>
+
+    <!-- 週別集計 -->
+    <div class="weekly-section" id="weeklySection">
+      <div class="section-title">📊 週別販売推移</div>
+      <div class="weekly-grid" id="weeklyGrid"></div>
+    </div>
+
+    <!-- 店舗別タブ -->
+    <div class="weekly-section">
+      <div class="section-title">📋 日別販売実績</div>
+      <div class="store-tabs" id="storeTabs"></div>
+      <div style="max-height:300px;overflow-y:auto">
+        <table class="daily-table">
+          <thead>
+            <tr><th>日付</th><th>数量</th><th>売上</th><th>値引</th></tr>
+          </thead>
+          <tbody id="dailyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 未発見 -->
+  <div id="notFoundSection" class="hidden">
+    <div class="not-found">
+      <div class="nf-icon">🔍</div>
+      <div class="nf-text">商品が見つかりません</div>
+      <div class="nf-sub" id="nfJan"></div>
+    </div>
+  </div>
+
+  <!-- 統計ページ -->
+  <div id="statsSection" class="hidden" style="padding-top:12px">
+    <div class="stats-grid" id="statsGrid"></div>
+    <div style="padding:16px;text-align:center">
+      <button onclick="triggerFtpSync()" style="background:var(--pri);color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:600" id="syncBtn">
+        🔄 FTPデータ同期
+      </button>
+      <div id="syncStatus" style="margin-top:8px;font-size:12px;color:var(--txt2)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ボトムナビ -->
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="showTab('scan')" id="tabScan">
+    <span class="icon">📷</span>
+    <span>スキャン</span>
+  </button>
+  <button class="nav-btn" onclick="showTab('stats')" id="tabStats">
+    <span class="icon">📊</span>
+    <span>データ</span>
+  </button>
+</div>
+
+<!-- ZXing バーコードリーダー -->
+<script src="https://unpkg.com/@AyonX/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+const API = '';
+let currentJan = '';
+let currentStore = '';
+let cameraActive = false;
+let html5QrCode = null;
+
+// ===== タブ切替 =====
+function showTab(tab) {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
+
+  document.getElementById('scanSection').classList.toggle('hidden', tab !== 'scan');
+  document.getElementById('resultSection').classList.toggle('hidden', tab !== 'scan' || !currentJan);
+  document.getElementById('notFoundSection').classList.add('hidden');
+  document.getElementById('statsSection').classList.toggle('hidden', tab !== 'stats');
+
+  if (tab === 'stats') loadStats();
+}
+
+// ===== 店舗選択 =====
+function onStoreChange() {
+  currentStore = document.getElementById('storeSelect').value;
+  if (currentJan) loadHistory(currentJan);
+}
+
+// ===== カメラ起動 =====
+function startCamera() {
+  document.getElementById('cameraOff').classList.add('hidden');
+  document.getElementById('cameraOn').classList.remove('hidden');
+
+  const video = document.getElementById('scanVideo');
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+  }).then(stream => {
+    video.srcObject = stream;
+    cameraActive = true;
+    startBarcodeDetection(video);
+  }).catch(err => {
+    console.error('Camera error:', err);
+    document.getElementById('cameraOff').classList.remove('hidden');
+    document.getElementById('cameraOn').classList.add('hidden');
+    alert('カメラにアクセスできません。手動入力をご利用ください。');
+  });
+}
+
+function startBarcodeDetection(video) {
+  if ('BarcodeDetector' in window) {
+    // ネイティブ BarcodeDetector API（Chrome Android対応）
+    const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a'] });
+    const detect = async () => {
+      if (!cameraActive) return;
+      try {
+        const barcodes = await detector.detect(video);
+        if (barcodes.length > 0) {
+          const code = barcodes[0].rawValue;
+          if (code && code.length >= 8) {
+            onBarcodeDetected(code);
+            await new Promise(r => setTimeout(r, 1500));
+          }
+        }
+      } catch (e) {}
+      if (cameraActive) requestAnimationFrame(detect);
+    };
+    detect();
+  } else {
+    // フォールバック: canvasベースの簡易検出
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    const scanLoop = () => {
+      if (!cameraActive) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0);
+      // BarcodeDetector非対応の場合は手動入力を促す
+      setTimeout(scanLoop, 500);
+    };
+    if (video.readyState >= 2) scanLoop();
+    else video.onloadeddata = scanLoop;
+    // 手動入力を促すヒント表示
+    document.querySelector('.scan-hint').textContent = 'お使いのブラウザではカメラ読取に非対応です。下のJAN入力欄をご利用ください';
+  }
+}
+
+function onBarcodeDetected(code) {
+  // 振動フィードバック
+  if (navigator.vibrate) navigator.vibrate(100);
+  document.getElementById('janInput').value = code;
+  searchProduct();
+}
+
+function stopCamera() {
+  cameraActive = false;
+  const video = document.getElementById('scanVideo');
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(t => t.stop());
+    video.srcObject = null;
+  }
+}
+
+// ===== 商品検索 =====
+function searchProduct() {
+  const jan = document.getElementById('janInput').value.trim();
+  if (!jan) return;
+
+  document.getElementById('resultSection').classList.add('hidden');
+  document.getElementById('notFoundSection').classList.add('hidden');
+
+  fetch(API + '/api/scan/product?jan=' + encodeURIComponent(jan))
+    .then(r => {
+      if (r.status === 404) {
+        currentJan = '';
+        document.getElementById('notFoundSection').classList.remove('hidden');
+        document.getElementById('nfJan').textContent = 'JAN: ' + jan;
+        return null;
+      }
+      return r.json();
+    })
+    .then(data => {
+      if (!data || data.error) return;
+      currentJan = jan;
+      displayProduct(data);
+      loadHistory(jan);
+    })
+    .catch(err => {
+      alert('通信エラー: ' + err.message);
+    });
+}
+
+// ===== 商品情報表示 =====
+function displayProduct(p) {
+  document.getElementById('resJan').textContent = 'JAN: ' + p.jan;
+  document.getElementById('resName').textContent = p.product_name || '不明';
+  document.getElementById('resSpec').textContent = p.spec || '';
+
+  const tp = p.tax_price || p.sell_price || 0;
+  document.getElementById('resTaxPrice').textContent = tp > 0 ? '¥' + tp.toLocaleString() : '-';
+  document.getElementById('resCost').textContent = p.cost > 0 ? '¥' + Math.round(p.cost).toLocaleString() : '-';
+  document.getElementById('resMargin').textContent = p.margin_rate > 0 ? p.margin_rate + '%' : '-';
+
+  // 詳細行
+  const details = [
+    ['EDP', p.edp || '-'],
+    ['本体売価', p.sell_price > 0 ? '¥' + p.sell_price.toLocaleString() : '-'],
+    ['分類', p.dept_code || '-'],
+    ['仕入先', p.supplier_code || '-'],
+  ];
+  const dr = document.getElementById('detailRows');
+  dr.innerHTML = details.map(d =>
+    '<div class="detail-row"><span class="dl">' + d[0] + '</span><span class="dv">' + d[1] + '</span></div>'
+  ).join('');
+
+  document.getElementById('resultSection').classList.remove('hidden');
+}
+
+// ===== 販売履歴 =====
+function loadHistory(jan) {
+  const store = currentStore;
+  let url = API + '/api/scan/history?jan=' + encodeURIComponent(jan);
+  if (store) url += '&store=' + store;
+
+  fetch(url)
+    .then(r => r.json())
+    .then(data => {
+      displayWeekly(data.weekly || []);
+      displayDaily(data.detail || [], data.daily || [], data.store_names || {});
+    })
+    .catch(() => {});
+}
+
+function displayWeekly(weekly) {
+  const grid = document.getElementById('weeklyGrid');
+  if (!weekly.length) {
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--txt2);font-size:13px">販売データなし</div>';
+    return;
+  }
+  grid.innerHTML = weekly.map(w =>
+    '<div class="wk-col">' +
+    '<div class="wh">' + (w.week === 1 ? '当週' : w.week + '週前') + '</div>' +
+    '<div class="wv">' + w.qty + '</div>' +
+    '<div class="wa">¥' + w.amount.toLocaleString() + '</div>' +
+    '</div>'
+  ).join('');
+}
+
+function displayDaily(detail, daily, storeNames) {
+  // 店舗タブ
+  const tabs = document.getElementById('storeTabs');
+  const stores = [...new Set(detail.map(r => r.store_code))].sort((a, b) => Number(a) - Number(b));
+  tabs.innerHTML = '<div class="store-tab active" onclick="filterDailyStore(this,\'\')">全店</div>' +
+    stores.map(s =>
+      '<div class="store-tab" onclick="filterDailyStore(this,\'' + s + '\')">' +
+      (storeNames[s] || '店' + s) + '</div>'
+    ).join('');
+
+  // 日別テーブル（まず全店集計）
+  window._dailyDetail = detail;
+  window._dailyAgg = daily;
+  window._storeNames = storeNames;
+  renderDailyTable('');
+}
+
+function filterDailyStore(el, store) {
+  document.querySelectorAll('.store-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderDailyTable(store);
+}
+
+function renderDailyTable(store) {
+  const body = document.getElementById('dailyBody');
+  let rows;
+  if (!store) {
+    rows = (window._dailyAgg || []).map(d => ({
+      date: d.date, qty: d.total_qty, amount: d.total_amount, discount: 0
+    }));
+  } else {
+    rows = (window._dailyDetail || [])
+      .filter(r => r.store_code === store)
+      .map(r => ({
+        date: r.date, qty: r.sales_qty, amount: r.sales_amount, discount: r.discount_amount
+      }));
+  }
+  if (!rows.length) {
+    body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--txt2);padding:16px">データなし</td></tr>';
+    return;
+  }
+  // 日付を yyyy-mm-dd → mm/dd に変換
+  body.innerHTML = rows.map(r => {
+    const d = r.date.length === 8
+      ? r.date.substring(4,6) + '/' + r.date.substring(6,8)
+      : r.date.substring(5).replace('-', '/');
+    return '<tr><td>' + d + '</td><td>' + r.qty + '</td><td>¥' + r.amount.toLocaleString() + '</td><td>' +
+      (r.discount > 0 ? '¥' + r.discount.toLocaleString() : '-') + '</td></tr>';
+  }).join('');
+}
+
+// ===== 統計 =====
+function loadStats() {
+  fetch(API + '/api/scan/stats')
+    .then(r => r.json())
+    .then(d => {
+      const g = document.getElementById('statsGrid');
+      const df = d.date_from ? d.date_from.substring(4,6)+'/'+d.date_from.substring(6) : '-';
+      const dt = d.date_to ? d.date_to.substring(4,6)+'/'+d.date_to.substring(6) : '-';
+      g.innerHTML =
+        '<div class="stat-card"><div class="sv">' + (d.product_count||0).toLocaleString() + '</div><div class="sl">登録商品数</div></div>' +
+        '<div class="stat-card"><div class="sv">' + (d.pos_record_count||0).toLocaleString() + '</div><div class="sl">POS実績レコード</div></div>' +
+        '<div class="stat-card"><div class="sv">' + df + '</div><div class="sl">データ開始日</div></div>' +
+        '<div class="stat-card"><div class="sv">' + dt + '</div><div class="sl">データ最終日</div></div>';
+    })
+    .catch(() => {});
+}
+
+function triggerFtpSync() {
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ 同期中...';
+  document.getElementById('syncStatus').textContent = 'FTPサーバに接続しています...';
+
+  fetch(API + '/api/ftp-sync', { method: 'POST' })
+    .then(r => r.json())
+    .then(d => {
+      if (d.error) {
+        document.getElementById('syncStatus').textContent = d.error;
+        btn.disabled = false;
+        btn.textContent = '🔄 FTPデータ同期';
+        return;
+      }
+      pollSync();
+    })
+    .catch(e => {
+      document.getElementById('syncStatus').textContent = 'エラー: ' + e.message;
+      btn.disabled = false;
+      btn.textContent = '🔄 FTPデータ同期';
+    });
+}
+
+function pollSync() {
+  fetch(API + '/api/ftp-sync/status')
+    .then(r => r.json())
+    .then(d => {
+      const st = document.getElementById('syncStatus');
+      if (d.log && d.log.length) st.textContent = d.log[d.log.length - 1];
+      if (d.running) {
+        setTimeout(pollSync, 2000);
+      } else {
+        const btn = document.getElementById('syncBtn');
+        btn.disabled = false;
+        btn.textContent = '🔄 FTPデータ同期';
+        if (d.last_result && d.last_result.success) {
+          st.textContent = '✅ 完了: 商品 ' + (d.last_result.scan_products||0).toLocaleString() +
+            '件, POS ' + (d.last_result.scan_pos||0).toLocaleString() + '件';
+          loadStats();
+        } else {
+          st.textContent = '❌ エラーが発生しました';
+        }
+      }
+    })
+    .catch(() => setTimeout(pollSync, 3000));
+}
+
+// ===== Service Worker 登録 =====
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
