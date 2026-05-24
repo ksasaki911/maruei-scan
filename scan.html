@@ -518,7 +518,8 @@ function pollSync() {
             '件, POS ' + (d.last_result.scan_pos||0).toLocaleString() + '件';
           loadStats();
         } else {
-          st.textContent = '❌ エラーが発生しました';
+          const errMsg = (d.last_result && d.last_result.error) ? d.last_result.error : '不明なエラー';
+          st.textContent = '❌ ' + errMsg;
         }
       }
     })

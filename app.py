@@ -532,6 +532,27 @@ def get_ftp_sync_status():
 ensure_tables()
 print(f"[初期化完了] DB: {DB_PATH}")
 
+# 起動時にDBが空なら自動FTP同期
+def _auto_sync_on_startup():
+    """サーバー起動時にDBが空なら自動的にFTP同期を実行"""
+    import time
+    time.sleep(3)  # サーバー起動を少し待つ
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        count = conn.execute("SELECT COUNT(*) FROM t_scan_products").fetchone()[0]
+        conn.close()
+        if count == 0:
+            print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
+            _run_ftp_sync()
+        else:
+            print(f"[自動同期] 商品 {count} 件存在 → スキップ", flush=True)
+    except Exception as e:
+        print(f"[自動同期エラー] {e}", flush=True)
+
+# バックグラウンドで自動同期を起動
+_auto_sync_thread = threading.Thread(target=_auto_sync_on_startup, daemon=True)
+_auto_sync_thread.start()
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     print(f"サーバー起動: http://localhost:{port}")
