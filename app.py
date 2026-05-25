@@ -917,7 +917,7 @@ def get_ftp_sync_status():
 
 # ========== 日次自動同期スケジューラー ==========
 
-DAILY_SYNC_HOUR_JST = 5  # 日本時間 午前5時に自動同期
+DAILY_SYNC_HOUR_JST = 8  # 日本時間 午前8時に自動同期（FTPデータ更新6-7時の後）
 
 def _daily_sync_scheduler():
     """毎日指定時刻(JST)にFTP同期を自動実行するバックグラウンドスレッド"""
