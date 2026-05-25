@@ -983,26 +983,41 @@ def get_sync_schedule():
 
 # ========== 起動 ==========
 
-if DATABASE_URL:
-    ensure_tables()
-    print(f"[初期化完了] PostgreSQL接続済み")
+def _safe_init():
+    """DB初期化・自動同期をバックグラウンドで安全に実行。
+    gunicornのポートバインドをブロックしない。"""
+    import time
+    time.sleep(2)  # gunicornがポートバインドする時間を確保
+
+    try:
+        ensure_tables()
+        print(f"[初期化完了] PostgreSQL接続済み", flush=True)
+    except Exception as e:
+        print(f"[初期化エラー] テーブル作成失敗: {e}", flush=True)
+        print("[初期化エラー] 60秒後に再試行します", flush=True)
+        time.sleep(60)
+        try:
+            ensure_tables()
+            print(f"[初期化完了] PostgreSQL接続済み (再試行成功)", flush=True)
+        except Exception as e2:
+            print(f"[初期化エラー] 再試行も失敗: {e2}", flush=True)
+            return
 
     # 起動時に商品マスタが空なら自動FTP同期
-    def _auto_sync_on_startup():
-        import time
-        time.sleep(3)
-        try:
-            result = query_one("SELECT COUNT(*) as cnt FROM t_scan_products")
-            if result and result['cnt'] == 0:
-                print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
-                _run_ftp_sync()
-            else:
-                print(f"[自動同期] 商品 {result['cnt']} 件存在 → スキップ", flush=True)
-        except Exception as e:
-            print(f"[自動同期エラー] {e}", flush=True)
+    try:
+        result = query_one("SELECT COUNT(*) as cnt FROM t_scan_products")
+        if result and result['cnt'] == 0:
+            print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
+            _run_ftp_sync()
+        else:
+            print(f"[自動同期] 商品 {result['cnt']} 件存在 → スキップ", flush=True)
+    except Exception as e:
+        print(f"[自動同期エラー] {e}", flush=True)
 
-    _auto_sync_thread = threading.Thread(target=_auto_sync_on_startup, daemon=True)
-    _auto_sync_thread.start()
+if DATABASE_URL:
+    # 初期化をバックグラウンドスレッドで実行（ポートバインドをブロックしない）
+    _init_thread = threading.Thread(target=_safe_init, daemon=True)
+    _init_thread.start()
 
     # 日次自動同期スケジューラーを起動
     _daily_sync_thread = threading.Thread(target=_daily_sync_scheduler, daemon=True)
