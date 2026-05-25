@@ -1,62 +1,93 @@
 """
-マルエーうちや 商品スキャンアプリ (PWA)
-JANコードで商品情報・販売実績を照会
+マルエーうちや 商品スキャンアプリ (PWA) v2
+JANコードで商品情報・販売実績・受払い・在庫を照会
 CHAINS基幹FTPからデータ取込
+PostgreSQL永続化対応
 """
 import os
 import sys
 import csv
-import sqlite3
-import ftplib
 import hashlib
 import tempfile
 import shutil
 import threading
+import ftplib
 from datetime import datetime
 from flask import Flask, request, jsonify, Response
 
 # ========== アプリ設定 ==========
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.environ.get('DATA_DIR', BASE_DIR)
-DB_PATH = os.path.join(DATA_DIR, 'scan.db')
+DATABASE_URL = os.environ.get('DATABASE_URL', '')
 
 app = Flask(__name__)
 
 # ========== DB ユーティリティ ==========
 
 def get_db():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    """PostgreSQL接続を返す"""
+    import psycopg2
+    import psycopg2.extras
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
 
-def rows_to_list(rows):
-    return [dict(r) for r in rows]
+def query_rows(sql, params=None):
+    """SELECT結果をdict listで返す"""
+    import psycopg2.extras
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(sql, params or [])
+    rows = [dict(r) for r in cur.fetchall()]
+    cur.close()
+    conn.close()
+    return rows
+
+
+def query_one(sql, params=None):
+    """SELECT結果の1行目をdictで返す"""
+    import psycopg2.extras
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(sql, params or [])
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def execute_sql(sql, params=None):
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(sql, params or [])
+    conn.commit()
+    cur.close()
+    conn.close()
 
 
 def ensure_tables():
-    """商品マスタ・POS日別テーブルを作成"""
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
-    conn.execute("""CREATE TABLE IF NOT EXISTS t_scan_products (
+    """全テーブル作成"""
+    conn = get_db()
+    cur = conn.cursor()
+
+    # 商品マスタ
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_products (
         jan TEXT PRIMARY KEY,
         edp TEXT,
         product_name TEXT,
         product_name_kana TEXT,
         spec TEXT,
         dept_code TEXT,
-        dept_l TEXT,
-        dept_m TEXT,
-        dept_s TEXT,
+        dept_l TEXT, dept_m TEXT, dept_s TEXT,
         supplier_code TEXT,
         cost REAL DEFAULT 0,
         sell_price INTEGER DEFAULT 0,
         tax_price INTEGER DEFAULT 0,
         updated_at TEXT
     )""")
-    conn.execute("""CREATE TABLE IF NOT EXISTS t_scan_pos_daily (
+
+    # POS日別
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_pos_daily (
         date TEXT,
         store_code TEXT,
         jan TEXT,
@@ -68,9 +99,108 @@ def ensure_tables():
         cost_amount INTEGER DEFAULT 0,
         PRIMARY KEY (date, store_code, jan)
     )""")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_scan_pos_jan ON t_scan_pos_daily(jan)")
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_scan_pos_date ON t_scan_pos_daily(date)")
+
+    # 受払い
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_ukebarai (
+        date TEXT,
+        store_code TEXT,
+        jan TEXT,
+        product_name TEXT,
+        sell_price INTEGER DEFAULT 0,
+        cost_price REAL DEFAULT 0,
+        pos_qty INTEGER DEFAULT 0,
+        order_qty INTEGER DEFAULT 0,
+        purchase_qty INTEGER DEFAULT 0,
+        transfer_in_qty INTEGER DEFAULT 0,
+        transfer_out_qty INTEGER DEFAULT 0,
+        return_qty INTEGER DEFAULT 0,
+        disposal_qty INTEGER DEFAULT 0,
+        col14 INTEGER DEFAULT 0,
+        col15 INTEGER DEFAULT 0,
+        PRIMARY KEY (date, store_code, jan)
+    )""")
+
+    # 在庫
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_zaiko (
+        store_code TEXT,
+        store_name TEXT,
+        dept_code TEXT,
+        edp TEXT,
+        jan TEXT,
+        product_name TEXT,
+        prev_stock INTEGER DEFAULT 0,
+        purchase_qty INTEGER DEFAULT 0,
+        pos_qty INTEGER DEFAULT 0,
+        transfer_in_qty INTEGER DEFAULT 0,
+        transfer_out_qty INTEGER DEFAULT 0,
+        theory_stock INTEGER DEFAULT 0,
+        actual_stock INTEGER DEFAULT 0,
+        current_stock INTEGER DEFAULT 0,
+        col15 INTEGER DEFAULT 0,
+        last_purchase_date TEXT,
+        stock_sell_amount REAL DEFAULT 0,
+        stock_cost_amount REAL DEFAULT 0,
+        updated_at TEXT,
+        PRIMARY KEY (store_code, jan)
+    )""")
+
+    # 棚割
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_tanawari (
+        store_code TEXT,
+        gondola_no TEXT,
+        shelf_no TEXT,
+        position REAL,
+        jan TEXT,
+        product_name TEXT,
+        face_count INTEGER DEFAULT 0,
+        edp TEXT,
+        dept_code TEXT,
+        dept_name TEXT,
+        sub_dept_code TEXT,
+        sub_dept_name TEXT,
+        supplier_code TEXT,
+        supplier_name TEXT,
+        cost REAL DEFAULT 0,
+        sell_price INTEGER DEFAULT 0,
+        margin_rate REAL DEFAULT 0,
+        PRIMARY KEY (store_code, gondola_no, shelf_no, position)
+    )""")
+
+    # 時間帯別POS
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_jikantai (
+        date TEXT,
+        time_slot TEXT,
+        store_code TEXT,
+        dept_code TEXT,
+        edp TEXT,
+        product_code TEXT,
+        jan TEXT,
+        qty INTEGER DEFAULT 0,
+        amount INTEGER DEFAULT 0,
+        PRIMARY KEY (date, time_slot, store_code, jan)
+    )""")
+
+    # インデックス
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pos_jan ON t_scan_pos_daily(jan)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_pos_date ON t_scan_pos_daily(date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_uke_jan ON t_scan_ukebarai(jan)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_uke_date ON t_scan_ukebarai(date)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_zaiko_jan ON t_scan_zaiko(jan)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_tana_jan ON t_scan_tanawari(jan)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_jikan_jan ON t_scan_jikantai(jan)")
+
+    # 同期履歴
+    cur.execute("""CREATE TABLE IF NOT EXISTS t_sync_log (
+        id SERIAL PRIMARY KEY,
+        sync_type TEXT,
+        started_at TIMESTAMP DEFAULT NOW(),
+        finished_at TIMESTAMP,
+        status TEXT,
+        detail TEXT
+    )""")
+
     conn.commit()
+    cur.close()
     conn.close()
 
 
@@ -120,61 +250,53 @@ def scan_product():
     if not jan:
         return jsonify({'error': 'jan parameter required'}), 400
 
-    conn = get_db()
-    product = conn.execute("SELECT * FROM t_scan_products WHERE jan = ?", (jan,)).fetchone()
+    product = query_one("SELECT * FROM t_scan_products WHERE jan = %s", [jan])
     if not product:
-        conn.close()
         return jsonify({'error': 'not_found', 'jan': jan}), 404
 
-    result = dict(product)
-
-    # 売価と原価から値入率を計算
-    if result.get('sell_price') and result['sell_price'] > 0 and result.get('cost') and result['cost'] > 0:
-        result['margin_rate'] = round((1 - result['cost'] / result['sell_price']) * 100, 1)
+    # 値入率計算
+    if product.get('sell_price') and product['sell_price'] > 0 and product.get('cost') and product['cost'] > 0:
+        product['margin_rate'] = round((1 - product['cost'] / product['sell_price']) * 100, 1)
     else:
-        result['margin_rate'] = 0
+        product['margin_rate'] = 0
 
-    conn.close()
-    return jsonify(result)
+    return jsonify(product)
 
 
 @app.route('/api/scan/history', methods=['GET'])
 def scan_history():
-    """JANコードの販売履歴（日別・店舗別）を取得"""
+    """JANコードの販売履歴（日別・店舗別）"""
     jan = request.args.get('jan', '').strip()
-    days = int(request.args.get('days', '28'))
     store = request.args.get('store', '')
 
     if not jan:
         return jsonify({'error': 'jan parameter required'}), 400
 
-    conn = get_db()
     query = """SELECT date, store_code, sales_qty, sales_amount,
                discount_count, discount_amount, cost_amount
-               FROM t_scan_pos_daily WHERE jan = ?"""
+               FROM t_scan_pos_daily WHERE jan = %s"""
     params = [jan]
 
     if store:
-        query += " AND store_code = ?"
+        query += " AND store_code = %s"
         params.append(store)
 
     query += " ORDER BY date DESC, store_code"
-    rows = rows_to_list(conn.execute(query, params).fetchall())
+    rows = query_rows(query, params)
 
-    # 店舗名を付与
     for r in rows:
-        r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + r['store_code'])
+        r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
 
-    # 日別合計（全店）
+    # 日別合計
     daily = {}
     for r in rows:
         d = r['date']
         if d not in daily:
             daily[d] = {'date': d, 'total_qty': 0, 'total_amount': 0}
-        daily[d]['total_qty'] += r.get('sales_qty', 0)
-        daily[d]['total_amount'] += r.get('sales_amount', 0)
+        daily[d]['total_qty'] += r.get('sales_qty', 0) or 0
+        daily[d]['total_amount'] += r.get('sales_amount', 0) or 0
 
-    # 週別集計（4週分）
+    # 週別集計
     dates_sorted = sorted(daily.keys(), reverse=True)
     weekly = []
     for i in range(0, min(len(dates_sorted), 28), 7):
@@ -185,7 +307,6 @@ def scan_history():
             wk['amount'] += daily[d]['total_amount']
         weekly.append(wk)
 
-    conn.close()
     return jsonify({
         'jan': jan,
         'detail': rows,
@@ -195,32 +316,107 @@ def scan_history():
     })
 
 
+# ========== 受払いAPI ==========
+
+@app.route('/api/scan/ukebarai', methods=['GET'])
+def scan_ukebarai():
+    """JANコードの受払いデータ"""
+    jan = request.args.get('jan', '').strip()
+    store = request.args.get('store', '')
+
+    if not jan:
+        return jsonify({'error': 'jan parameter required'}), 400
+
+    query = """SELECT date, store_code, product_name, sell_price, cost_price,
+               pos_qty, order_qty, purchase_qty, transfer_in_qty,
+               transfer_out_qty, return_qty, disposal_qty
+               FROM t_scan_ukebarai WHERE jan = %s"""
+    params = [jan]
+
+    if store:
+        query += " AND store_code = %s"
+        params.append(store)
+
+    query += " ORDER BY date DESC, store_code LIMIT 200"
+    rows = query_rows(query, params)
+
+    for r in rows:
+        r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
+
+    return jsonify({'jan': jan, 'data': rows, 'store_names': STORE_NAMES})
+
+
+# ========== 在庫API ==========
+
+@app.route('/api/scan/zaiko', methods=['GET'])
+def scan_zaiko():
+    """JANコードの在庫データ（全店舗）"""
+    jan = request.args.get('jan', '').strip()
+
+    if not jan:
+        return jsonify({'error': 'jan parameter required'}), 400
+
+    rows = query_rows("""SELECT store_code, store_name, product_name,
+               prev_stock, purchase_qty, pos_qty, transfer_in_qty,
+               transfer_out_qty, theory_stock, actual_stock, current_stock,
+               last_purchase_date, stock_sell_amount, stock_cost_amount
+               FROM t_scan_zaiko WHERE jan = %s
+               ORDER BY store_code""", [jan])
+
+    # 全店合計
+    total = {
+        'prev_stock': 0, 'purchase_qty': 0, 'pos_qty': 0,
+        'transfer_in_qty': 0, 'transfer_out_qty': 0,
+        'theory_stock': 0, 'current_stock': 0,
+        'stock_sell_amount': 0, 'stock_cost_amount': 0
+    }
+    for r in rows:
+        for k in total:
+            total[k] += (r.get(k) or 0)
+
+    return jsonify({'jan': jan, 'stores': rows, 'total': total})
+
+
+# ========== 統計API ==========
+
 @app.route('/api/scan/stores', methods=['GET'])
 def scan_stores():
-    """店舗一覧"""
     return jsonify(STORE_NAMES)
 
 
 @app.route('/api/scan/stats', methods=['GET'])
 def scan_stats():
-    """統計情報"""
-    conn = get_db()
     try:
-        prod_count = conn.execute("SELECT COUNT(*) FROM t_scan_products").fetchone()[0]
+        prod = query_one("SELECT COUNT(*) as cnt FROM t_scan_products")
+        prod_count = prod['cnt'] if prod else 0
     except:
         prod_count = 0
     try:
-        pos_count = conn.execute("SELECT COUNT(*) FROM t_scan_pos_daily").fetchone()[0]
-        date_range = conn.execute("SELECT MIN(date), MAX(date) FROM t_scan_pos_daily").fetchone()
+        pos = query_one("SELECT COUNT(*) as cnt, MIN(date) as d_min, MAX(date) as d_max FROM t_scan_pos_daily")
+        pos_count = pos['cnt'] if pos else 0
+        date_from = pos['d_min'] if pos else None
+        date_to = pos['d_max'] if pos else None
     except:
         pos_count = 0
-        date_range = (None, None)
-    conn.close()
+        date_from = date_to = None
+    try:
+        uke = query_one("SELECT COUNT(*) as cnt FROM t_scan_ukebarai")
+        uke_count = uke['cnt'] if uke else 0
+    except:
+        uke_count = 0
+    try:
+        zaiko = query_one("SELECT COUNT(*) as cnt FROM t_scan_zaiko")
+        zaiko_count = zaiko['cnt'] if zaiko else 0
+    except:
+        zaiko_count = 0
+
     return jsonify({
         'product_count': prod_count,
         'pos_record_count': pos_count,
-        'date_from': date_range[0],
-        'date_to': date_range[1],
+        'ukebarai_count': uke_count,
+        'zaiko_count': zaiko_count,
+        'date_from': date_from,
+        'date_to': date_to,
     })
 
 
@@ -240,7 +436,8 @@ _ftp_sync_status = {
 }
 _ftp_sync_lock = threading.Lock()
 
-TARGET_CSV_FILES = ["posd.csv", "syohin.csv", "baika.csv"]
+# 取込対象ファイル
+TARGET_PREFIXES = ['posd', 'syohin', 'baika', 'ukebarai', 'zaiko', 'tanawari']
 
 
 def _ftp_log(msg):
@@ -267,15 +464,6 @@ def _jp_strip(s):
     return (s or "").strip().strip("　").strip()
 
 
-def _is_target_csv(filename):
-    fn = filename.lower()
-    for t in TARGET_CSV_FILES:
-        base = t.rsplit(".", 1)[0]
-        if fn == t or fn.endswith("_" + t) or (base in fn and fn.endswith(".csv")):
-            return t
-    return None
-
-
 def _connect_ftp():
     _ftp_log(f"FTPサーバに接続中: {FTP_HOST}:{FTP_PORT}")
     try:
@@ -299,11 +487,12 @@ def _connect_ftp():
 
 
 def _download_csvs(ftp, tmpdir):
+    """最新の各CSVファイルをダウンロード"""
     try:
         ftp.cwd(FTP_REMOTE_DIR)
     except ftplib.error_perm as e:
         _ftp_log(f"ディレクトリ移動失敗 {FTP_REMOTE_DIR}: {e}")
-        return []
+        return {}
 
     files = []
     try:
@@ -315,23 +504,29 @@ def _download_csvs(ftp, tmpdir):
             files = [n for n in ftp.nlst() if n not in (".", "..")]
         except ftplib.error_perm:
             _ftp_log("ファイル一覧取得失敗")
-            return []
+            return {}
 
     _ftp_log(f"リモートファイル数: {len(files)}")
-    downloaded = []
+
+    # 各プレフィックスの最新ファイルを特定
+    latest = {}
     for name in files:
-        target_type = _is_target_csv(name)
-        if not target_type:
-            continue
-        local_path = os.path.join(tmpdir, target_type)
+        for prefix in TARGET_PREFIXES:
+            if name.startswith(prefix + '_') and name.endswith('.csv'):
+                if prefix not in latest or name > latest[prefix]:
+                    latest[prefix] = name
+
+    downloaded = {}
+    for prefix, fname in latest.items():
+        local_path = os.path.join(tmpdir, prefix + '.csv')
         try:
             with open(local_path, "wb") as f:
-                ftp.retrbinary(f"RETR {name}", f.write)
+                ftp.retrbinary(f"RETR {fname}", f.write)
             size = os.path.getsize(local_path)
-            _ftp_log(f"  ダウンロード: {name} → {target_type} ({size:,} bytes)")
-            downloaded.append(target_type)
+            _ftp_log(f"  ダウンロード: {fname} ({size/1024:.0f} KB)")
+            downloaded[prefix] = local_path
         except Exception as e:
-            _ftp_log(f"  ダウンロード失敗 {name}: {e}")
+            _ftp_log(f"  ダウンロード失敗 {fname}: {e}")
 
     return downloaded
 
@@ -348,40 +543,33 @@ def _read_sjis_csv(path, min_cols):
 
 def _sync_products(tmpdir, downloaded):
     """syohin.csv + baika.csv → t_scan_products"""
-    syohin_path = os.path.join(tmpdir, "syohin.csv")
-    if "syohin.csv" not in downloaded or not os.path.exists(syohin_path):
+    if 'syohin' not in downloaded:
         _ftp_log("syohin.csv なし: 商品マスタ更新スキップ")
         return 0
 
     _ftp_log("商品マスタ(syohin.csv) 読込中...")
     products = {}
-    for r in _read_sjis_csv(syohin_path, 30):
+    for r in _read_sjis_csv(downloaded['syohin'], 30):
         jan = _jp_strip(r[3])
         if len(jan) < 8:
             continue
         products[jan] = {
-            'jan': jan,
-            'edp': _jp_strip(r[0]),
+            'jan': jan, 'edp': _jp_strip(r[0]),
             'product_name': _jp_strip(r[12]),
             'product_name_kana': _jp_strip(r[10]),
             'spec': _jp_strip(r[13]),
             'dept_code': f"{_jp_strip(r[14])}-{_jp_strip(r[15])}-{_jp_strip(r[16])}-{_jp_strip(r[17])}",
-            'dept_l': _jp_strip(r[14]),
-            'dept_m': _jp_strip(r[15]),
+            'dept_l': _jp_strip(r[14]), 'dept_m': _jp_strip(r[15]),
             'dept_s': _jp_strip(r[16]),
             'supplier_code': _jp_strip(r[9]),
-            'sell_price': _to_num(r[28]),
-            'cost': 0,
-            'tax_price': 0,
+            'sell_price': _to_num(r[28]), 'cost': 0, 'tax_price': 0,
         }
     _ftp_log(f"  商品マスタ: {len(products)} 件読込")
 
-    # baika.csv で原価・税込売価を補完
-    baika_path = os.path.join(tmpdir, "baika.csv")
-    if "baika.csv" in downloaded and os.path.exists(baika_path):
+    if 'baika' in downloaded:
         _ftp_log("売価マスタ(baika.csv) 読込中...")
         baika_count = 0
-        for r in _read_sjis_csv(baika_path, 7):
+        for r in _read_sjis_csv(downloaded['baika'], 7):
             jan = _jp_strip(r[0])
             if jan in products:
                 cost_rate = float(r[3]) if r[3] else 0
@@ -396,36 +584,43 @@ def _sync_products(tmpdir, downloaded):
                 baika_count += 1
         _ftp_log(f"  売価データ: {baika_count} 件適用")
 
-    # DB書き込み
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn = get_db()
+    cur = conn.cursor()
     now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    conn.execute("DELETE FROM t_scan_products")
-    rows = [(p['jan'], p['edp'], p['product_name'], p['product_name_kana'],
+    cur.execute("DELETE FROM t_scan_products")
+    for p in products.values():
+        cur.execute("""INSERT INTO t_scan_products
+            (jan, edp, product_name, product_name_kana, spec,
+             dept_code, dept_l, dept_m, dept_s, supplier_code,
+             cost, sell_price, tax_price, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (jan) DO UPDATE SET
+            edp=EXCLUDED.edp, product_name=EXCLUDED.product_name,
+            product_name_kana=EXCLUDED.product_name_kana, spec=EXCLUDED.spec,
+            dept_code=EXCLUDED.dept_code, dept_l=EXCLUDED.dept_l,
+            dept_m=EXCLUDED.dept_m, dept_s=EXCLUDED.dept_s,
+            supplier_code=EXCLUDED.supplier_code, cost=EXCLUDED.cost,
+            sell_price=EXCLUDED.sell_price, tax_price=EXCLUDED.tax_price,
+            updated_at=EXCLUDED.updated_at""",
+            (p['jan'], p['edp'], p['product_name'], p['product_name_kana'],
              p['spec'], p['dept_code'], p['dept_l'], p['dept_m'], p['dept_s'],
-             p['supplier_code'], p['cost'], p['sell_price'], p['tax_price'], now)
-            for p in products.values()]
-    conn.executemany("""INSERT OR REPLACE INTO t_scan_products
-        (jan, edp, product_name, product_name_kana, spec,
-         dept_code, dept_l, dept_m, dept_s, supplier_code,
-         cost, sell_price, tax_price, updated_at)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", rows)
+             p['supplier_code'], p['cost'], p['sell_price'], p['tax_price'], now))
     conn.commit()
+    cur.close()
     conn.close()
-    _ftp_log(f"商品マスタ更新完了: {len(rows)} 件")
-    return len(rows)
+    _ftp_log(f"商品マスタ更新完了: {len(products)} 件")
+    return len(products)
 
 
 def _sync_pos(tmpdir, downloaded):
     """posd.csv → t_scan_pos_daily"""
-    posd_path = os.path.join(tmpdir, "posd.csv")
-    if "posd.csv" not in downloaded or not os.path.exists(posd_path):
+    if 'posd' not in downloaded:
         _ftp_log("posd.csv なし: POS日別更新スキップ")
         return 0
 
     _ftp_log("全店POS日別(posd.csv) 読込中...")
     agg = {}
-    for r in _read_sjis_csv(posd_path, 10):
+    for r in _read_sjis_csv(downloaded['posd'], 10):
         key = (_jp_strip(r[0]), _jp_strip(r[1]), _jp_strip(r[2]))
         if key not in agg:
             agg[key] = {'edp': _jp_strip(r[3]), 'qty': 0, 'amt': 0, 'dc': 0, 'da': 0, 'cost': 0}
@@ -437,28 +632,159 @@ def _sync_pos(tmpdir, downloaded):
         a['cost'] += _to_num(r[9])
 
     dates = set(k[0] for k in agg)
-    _ftp_log(f"  POS日別: {len(agg)} 件 (日付: {sorted(dates)})")
+    _ftp_log(f"  POS日別: {len(agg)} 件 (日付: {len(dates)}日分)")
 
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("PRAGMA journal_mode=WAL")
+    conn = get_db()
+    cur = conn.cursor()
     for dt in dates:
-        conn.execute("DELETE FROM t_scan_pos_daily WHERE date = ?", (dt,))
+        cur.execute("DELETE FROM t_scan_pos_daily WHERE date = %s", (dt,))
 
-    rows = [(k[0], k[1], k[2], v['edp'], v['qty'], v['amt'], v['dc'], v['da'], v['cost'])
-            for k, v in agg.items()]
-    conn.executemany("""INSERT INTO t_scan_pos_daily
-        (date, store_code, jan, edp, sales_qty, sales_amount,
-         discount_count, discount_amount, cost_amount)
-        VALUES (?,?,?,?,?,?,?,?,?)""", rows)
+    for k, v in agg.items():
+        cur.execute("""INSERT INTO t_scan_pos_daily
+            (date, store_code, jan, edp, sales_qty, sales_amount,
+             discount_count, discount_amount, cost_amount)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (k[0], k[1], k[2], v['edp'], v['qty'], v['amt'], v['dc'], v['da'], v['cost']))
     conn.commit()
-    total = conn.execute("SELECT COUNT(*) FROM t_scan_pos_daily").fetchone()[0]
+    total = query_one("SELECT COUNT(*) as cnt FROM t_scan_pos_daily")
+    cur.close()
     conn.close()
-    _ftp_log(f"POS日別更新完了: {len(rows)} 件登録 (総行数: {total})")
-    return len(rows)
+    _ftp_log(f"POS日別更新完了: {len(agg)} 件 (総行数: {total['cnt']})")
+    return len(agg)
+
+
+def _sync_ukebarai(tmpdir, downloaded):
+    """ukebarai.csv → t_scan_ukebarai"""
+    if 'ukebarai' not in downloaded:
+        _ftp_log("ukebarai.csv なし: 受払い更新スキップ")
+        return 0
+
+    _ftp_log("受払い(ukebarai.csv) 読込中...")
+    count = 0
+    conn = get_db()
+    cur = conn.cursor()
+
+    dates_seen = set()
+    rows_batch = []
+    for r in _read_sjis_csv(downloaded['ukebarai'], 15):
+        date = _jp_strip(r[0])
+        store = _jp_strip(r[1])
+        jan = _jp_strip(r[2])
+        if len(jan) < 3:
+            continue
+        dates_seen.add(date)
+        rows_batch.append((
+            date, store, jan, _jp_strip(r[3]),
+            _to_num(r[4]), _to_num(r[5]),
+            _to_num(r[6]), _to_num(r[7]), _to_num(r[8]),
+            _to_num(r[9]), _to_num(r[10]), _to_num(r[11]),
+            _to_num(r[12]), _to_num(r[13]), _to_num(r[14])
+        ))
+        count += 1
+
+    # 日付単位で既存データ削除してINSERT
+    for dt in dates_seen:
+        cur.execute("DELETE FROM t_scan_ukebarai WHERE date = %s", (dt,))
+
+    for row in rows_batch:
+        cur.execute("""INSERT INTO t_scan_ukebarai
+            (date, store_code, jan, product_name, sell_price, cost_price,
+             pos_qty, order_qty, purchase_qty, transfer_in_qty,
+             transfer_out_qty, return_qty, disposal_qty, col14, col15)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", row)
+
+    conn.commit()
+    total = query_one("SELECT COUNT(*) as cnt FROM t_scan_ukebarai")
+    cur.close()
+    conn.close()
+    _ftp_log(f"受払い更新完了: {count} 件 (総行数: {total['cnt']})")
+    return count
+
+
+def _sync_zaiko(tmpdir, downloaded):
+    """zaiko.csv → t_scan_zaiko"""
+    if 'zaiko' not in downloaded:
+        _ftp_log("zaiko.csv なし: 在庫更新スキップ")
+        return 0
+
+    _ftp_log("在庫(zaiko.csv) 読込中...")
+    count = 0
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM t_scan_zaiko")
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    for r in _read_sjis_csv(downloaded['zaiko'], 18):
+        store = _jp_strip(r[0])
+        jan = _jp_strip(r[4])
+        if len(jan) < 8:
+            continue
+        cur.execute("""INSERT INTO t_scan_zaiko
+            (store_code, store_name, dept_code, edp, jan, product_name,
+             prev_stock, purchase_qty, pos_qty, transfer_in_qty,
+             transfer_out_qty, theory_stock, actual_stock, current_stock,
+             col15, last_purchase_date, stock_sell_amount, stock_cost_amount, updated_at)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (store_code, jan) DO UPDATE SET
+            prev_stock=EXCLUDED.prev_stock, purchase_qty=EXCLUDED.purchase_qty,
+            pos_qty=EXCLUDED.pos_qty, theory_stock=EXCLUDED.theory_stock,
+            current_stock=EXCLUDED.current_stock, stock_sell_amount=EXCLUDED.stock_sell_amount,
+            stock_cost_amount=EXCLUDED.stock_cost_amount, updated_at=EXCLUDED.updated_at""",
+            (store, _jp_strip(r[1]), _jp_strip(r[2]), _jp_strip(r[3]),
+             jan, _jp_strip(r[5]),
+             _to_num(r[6]), _to_num(r[7]), _to_num(r[8]),
+             _to_num(r[9]), _to_num(r[10]), _to_num(r[11]),
+             _to_num(r[12]), _to_num(r[13]), _to_num(r[14]),
+             _jp_strip(r[15]), _to_num(r[16]), _to_num(r[17]), now))
+        count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    _ftp_log(f"在庫更新完了: {count} 件")
+    return count
+
+
+def _sync_tanawari(tmpdir, downloaded):
+    """tanawari.csv → t_scan_tanawari"""
+    if 'tanawari' not in downloaded:
+        _ftp_log("tanawari.csv なし: 棚割更新スキップ")
+        return 0
+
+    _ftp_log("棚割(tanawari.csv) 読込中...")
+    count = 0
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM t_scan_tanawari")
+
+    for r in _read_sjis_csv(downloaded['tanawari'], 16):
+        jan = _jp_strip(r[4])
+        if len(jan) < 8:
+            continue
+        cur.execute("""INSERT INTO t_scan_tanawari
+            (store_code, gondola_no, shelf_no, position, jan, product_name,
+             face_count, edp, dept_code, dept_name, sub_dept_code,
+             sub_dept_name, supplier_code, supplier_name, cost, sell_price, margin_rate)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            ON CONFLICT (store_code, gondola_no, shelf_no, position) DO UPDATE SET
+            jan=EXCLUDED.jan, product_name=EXCLUDED.product_name,
+            face_count=EXCLUDED.face_count, sell_price=EXCLUDED.sell_price""",
+            (_jp_strip(r[0]), _jp_strip(r[1]), _jp_strip(r[2]), _to_num(r[3]),
+             jan, _jp_strip(r[5]), _to_num(r[6]), _jp_strip(r[7]),
+             _jp_strip(r[8]), _jp_strip(r[9]), _jp_strip(r[10]),
+             _jp_strip(r[11]), _jp_strip(r[12]), _jp_strip(r[13]),
+             _to_num(r[14]), _to_num(r[15]), _to_num(r[16])))
+        count += 1
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    _ftp_log(f"棚割更新完了: {count} 件")
+    return count
 
 
 def _run_ftp_sync():
-    """FTP同期の本体（バックグラウンドスレッドで実行）"""
+    """FTP同期の本体"""
     _ftp_sync_status['log'] = []
     _ftp_sync_status['running'] = True
     _ftp_sync_status['last_run'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -466,7 +792,6 @@ def _run_ftp_sync():
     tmpdir = tempfile.mkdtemp(prefix="scan_sync_")
     try:
         _ftp_log("=== FTP同期 開始 ===")
-
         ftp = _connect_ftp()
         try:
             downloaded = _download_csvs(ftp, tmpdir)
@@ -474,25 +799,35 @@ def _run_ftp_sync():
             try:
                 ftp.quit()
             except Exception:
-                ftp.close()
+                try:
+                    ftp.close()
+                except:
+                    pass
 
-        _ftp_log(f"ダウンロード完了: {len(downloaded)} ファイル ({', '.join(downloaded)})")
+        _ftp_log(f"ダウンロード完了: {len(downloaded)} ファイル ({', '.join(downloaded.keys())})")
 
         scan_products = _sync_products(tmpdir, downloaded)
         scan_pos = _sync_pos(tmpdir, downloaded)
+        scan_uke = _sync_ukebarai(tmpdir, downloaded)
+        scan_zaiko = _sync_zaiko(tmpdir, downloaded)
+        scan_tana = _sync_tanawari(tmpdir, downloaded)
 
         _ftp_log("=== FTP同期 完了 ===")
         _ftp_sync_status['last_result'] = {
             'success': True,
             'downloaded': len(downloaded),
-            'files': downloaded,
+            'files': list(downloaded.keys()),
             'scan_products': scan_products,
             'scan_pos': scan_pos,
+            'scan_ukebarai': scan_uke,
+            'scan_zaiko': scan_zaiko,
+            'scan_tanawari': scan_tana,
             'finished_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         }
-
     except Exception as e:
+        import traceback
         _ftp_log(f"エラー: {e}")
+        _ftp_log(traceback.format_exc())
         _ftp_sync_status['last_result'] = {
             'success': False,
             'error': str(e),
@@ -529,29 +864,28 @@ def get_ftp_sync_status():
 
 # ========== 起動 ==========
 
-ensure_tables()
-print(f"[初期化完了] DB: {DB_PATH}")
+if DATABASE_URL:
+    ensure_tables()
+    print(f"[初期化完了] PostgreSQL接続済み")
 
-# 起動時にDBが空なら自動FTP同期
-def _auto_sync_on_startup():
-    """サーバー起動時にDBが空なら自動的にFTP同期を実行"""
-    import time
-    time.sleep(3)  # サーバー起動を少し待つ
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        count = conn.execute("SELECT COUNT(*) FROM t_scan_products").fetchone()[0]
-        conn.close()
-        if count == 0:
-            print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
-            _run_ftp_sync()
-        else:
-            print(f"[自動同期] 商品 {count} 件存在 → スキップ", flush=True)
-    except Exception as e:
-        print(f"[自動同期エラー] {e}", flush=True)
+    # 起動時に商品マスタが空なら自動FTP同期
+    def _auto_sync_on_startup():
+        import time
+        time.sleep(3)
+        try:
+            result = query_one("SELECT COUNT(*) as cnt FROM t_scan_products")
+            if result and result['cnt'] == 0:
+                print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
+                _run_ftp_sync()
+            else:
+                print(f"[自動同期] 商品 {result['cnt']} 件存在 → スキップ", flush=True)
+        except Exception as e:
+            print(f"[自動同期エラー] {e}", flush=True)
 
-# バックグラウンドで自動同期を起動
-_auto_sync_thread = threading.Thread(target=_auto_sync_on_startup, daemon=True)
-_auto_sync_thread.start()
+    _auto_sync_thread = threading.Thread(target=_auto_sync_on_startup, daemon=True)
+    _auto_sync_thread.start()
+else:
+    print("[警告] DATABASE_URL未設定。PostgreSQLに接続できません。", flush=True)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
