@@ -475,10 +475,10 @@ def scan_stats():
 
 # ========== FTP同期 ==========
 
-FTP_HOST = os.environ.get('FTP_HOST', 'o6021v-1001.kagoya.net')
+FTP_HOST = os.environ.get('FTP_HOST', '')
 FTP_PORT = int(os.environ.get('FTP_PORT', '21'))
-FTP_USER = os.environ.get('FTP_USER', 'kir700301..tisc')
-FTP_PASS = os.environ.get('FTP_PASS', 'tiscmaruei2026')
+FTP_USER = os.environ.get('FTP_USER', '')
+FTP_PASS = os.environ.get('FTP_PASS', '')
 FTP_REMOTE_DIR = os.environ.get('FTP_REMOTE_DIR', '/old')
 
 _ftp_sync_status = {
