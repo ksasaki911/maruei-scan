@@ -263,6 +263,44 @@ def scan_product():
     return jsonify(product)
 
 
+@app.route('/api/scan/search', methods=['GET'])
+def scan_search():
+    """商品名・メーカー名で商品を検索（部分一致）"""
+    q = request.args.get('q', '').strip()
+    if not q or len(q) < 2:
+        return jsonify({'error': '2文字以上で検索してください'}), 400
+
+    # スペースで分割して AND 検索
+    terms = q.split()
+    conditions = []
+    params = []
+    for term in terms[:5]:  # 最大5語
+        conditions.append(
+            "(product_name ILIKE %s OR product_name_kana ILIKE %s OR supplier_code ILIKE %s OR edp ILIKE %s OR jan ILIKE %s)"
+        )
+        like = f"%{term}%"
+        params.extend([like, like, like, like, like])
+
+    where = " AND ".join(conditions)
+    sql = f"""SELECT jan, edp, product_name, product_name_kana, spec,
+              dept_code, supplier_code, cost, sell_price, tax_price
+              FROM t_scan_products
+              WHERE {where}
+              ORDER BY product_name
+              LIMIT 50"""
+
+    rows = query_rows(sql, params)
+
+    # 値入率を計算
+    for r in rows:
+        if r.get('sell_price') and r['sell_price'] > 0 and r.get('cost') and r['cost'] > 0:
+            r['margin_rate'] = round((1 - r['cost'] / r['sell_price']) * 100, 1)
+        else:
+            r['margin_rate'] = 0
+
+    return jsonify({'results': rows, 'count': len(rows), 'query': q})
+
+
 @app.route('/api/scan/history', methods=['GET'])
 def scan_history():
     """JANコードの販売履歴（日別・店舗別）"""

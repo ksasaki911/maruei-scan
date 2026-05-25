@@ -120,9 +120,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .stat-card .sl{font-size:11px;color:var(--txt2);margin-top:4px}
 
 /* 初期表示メッセージ */
-.scan-prompt{text-align:center;padding:40px 16px;color:var(--txt2)}
-.scan-prompt .sp-icon{font-size:48px;margin-bottom:8px;opacity:.5}
-.scan-prompt .sp-text{font-size:14px}
+.scan-prompt{text-align:center;padding:30px 16px;color:var(--txt2)}
+.scan-prompt .sp-icon{font-size:40px;margin-bottom:6px;opacity:.5}
+.scan-prompt .sp-text{font-size:13px}
+
+/* 検索モード切替 */
+.search-mode-tabs{display:flex;gap:0;background:var(--card);border-bottom:1px solid var(--border)}
+.search-mode-tab{flex:1;padding:8px;text-align:center;font-size:12px;font-weight:600;border:none;background:var(--card);color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent}
+.search-mode-tab.active{color:var(--pri);border-bottom-color:var(--pri)}
+
+/* 検索結果一覧 */
+.search-results{margin:8px}
+.search-result-item{background:var(--card);border-radius:10px;margin-bottom:6px;padding:10px 14px;box-shadow:0 1px 3px rgba(0,0,0,.06);cursor:pointer;border:1px solid var(--border);transition:background .15s}
+.search-result-item:active{background:#e8eaf6}
+.search-result-item .sr-name{font-size:14px;font-weight:600;line-height:1.3}
+.search-result-item .sr-sub{font-size:11px;color:var(--txt2);margin-top:2px;display:flex;gap:8px}
+.search-result-item .sr-prices{display:flex;gap:12px;margin-top:4px;font-size:13px}
+.search-result-item .sr-prices .sr-sell{color:var(--red);font-weight:600}
+.search-result-item .sr-prices .sr-cost{color:var(--blue)}
+.search-result-item .sr-prices .sr-margin{color:var(--green)}
+.search-count{padding:4px 12px;font-size:11px;color:var(--txt2)}
 
 .hidden{display:none!important}
 </style>
@@ -235,14 +252,24 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
     <!-- スキャン前の初期メッセージ -->
     <div id="scanPrompt" class="scan-prompt">
       <div class="sp-icon">👇</div>
-      <div class="sp-text">下のカメラでバーコードをスキャンしてください</div>
+      <div class="sp-text">下のカメラでバーコードをスキャン<br>または商品名で検索</div>
     </div>
 
-    <!-- 3) 手動入力 -->
+    <!-- 検索結果一覧（名前検索時） -->
+    <div id="searchResultsSection" class="hidden">
+      <div class="search-count" id="searchCount"></div>
+      <div class="search-results" id="searchResults"></div>
+    </div>
+
+    <!-- 3) 検索モード切替 + 入力 -->
+    <div class="search-mode-tabs">
+      <button class="search-mode-tab active" id="modeJan" onclick="setSearchMode('jan')">JANコード</button>
+      <button class="search-mode-tab" id="modeName" onclick="setSearchMode('name')">商品名検索</button>
+    </div>
     <div class="manual-input">
       <input type="tel" id="janInput" placeholder="JANコードを入力" maxlength="13"
-             onkeydown="if(event.key==='Enter')searchProduct()">
-      <button onclick="searchProduct()">検索</button>
+             onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()" id="searchBtn">検索</button>
     </div>
 
     <!-- 4) カメラエリア（下部・コンパクト） -->
@@ -283,6 +310,7 @@ let currentJan = '';
 let currentStore = '';
 let cameraActive = false;
 let html5QrCode = null;
+let searchMode = 'jan'; // 'jan' or 'name'
 
 // ===== スキャン成功音 =====
 function playBeep() {
@@ -412,13 +440,98 @@ function stopCamera() {
   }
 }
 
-// ===== 商品検索 =====
+// ===== 検索モード =====
+function setSearchMode(mode) {
+  searchMode = mode;
+  document.getElementById('modeJan').classList.toggle('active', mode === 'jan');
+  document.getElementById('modeName').classList.toggle('active', mode === 'name');
+  const input = document.getElementById('janInput');
+  if (mode === 'jan') {
+    input.type = 'tel';
+    input.placeholder = 'JANコードを入力';
+    input.maxLength = 13;
+  } else {
+    input.type = 'text';
+    input.placeholder = '商品名・メーカー名を入力';
+    input.maxLength = 50;
+  }
+  input.value = '';
+  input.focus();
+}
+
+function doSearch() {
+  if (searchMode === 'name') {
+    searchByName();
+  } else {
+    searchProduct();
+  }
+}
+
+// ===== 商品名検索 =====
+function searchByName() {
+  const q = document.getElementById('janInput').value.trim();
+  if (!q || q.length < 2) { alert('2文字以上入力してください'); return; }
+
+  document.getElementById('resultSection').classList.add('hidden');
+  document.getElementById('notFoundSection').classList.add('hidden');
+  document.getElementById('scanPrompt').classList.add('hidden');
+  document.getElementById('searchResultsSection').classList.remove('hidden');
+  document.getElementById('searchResults').innerHTML = '<div style="text-align:center;padding:20px;color:var(--txt2)">検索中...</div>';
+  document.getElementById('searchCount').textContent = '';
+
+  fetch(API + '/api/scan/search?q=' + encodeURIComponent(q))
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { alert(data.error); return; }
+      const results = data.results || [];
+      document.getElementById('searchCount').textContent = results.length > 0
+        ? `${data.count}件ヒット（最大50件表示）`
+        : '該当商品なし';
+
+      if (!results.length) {
+        document.getElementById('searchResults').innerHTML =
+          '<div style="text-align:center;padding:20px;color:var(--txt2)">「' + q + '」に該当する商品が見つかりません</div>';
+        return;
+      }
+
+      document.getElementById('searchResults').innerHTML = results.map(r => {
+        const sell = r.tax_price || r.sell_price || 0;
+        const cost = r.cost || 0;
+        const margin = r.margin_rate || 0;
+        return '<div class="search-result-item" onclick="selectSearchResult(\'' + r.jan + '\')">' +
+          '<div class="sr-name">' + (r.product_name||'不明') + '</div>' +
+          '<div class="sr-sub"><span>JAN: ' + r.jan + '</span><span>' + (r.spec||'') + '</span></div>' +
+          '<div class="sr-prices">' +
+            '<span class="sr-sell">¥' + sell.toLocaleString() + '</span>' +
+            (cost > 0 ? '<span class="sr-cost">原価¥' + Math.round(cost).toLocaleString() + '</span>' : '') +
+            (margin > 0 ? '<span class="sr-margin">' + margin + '%</span>' : '') +
+          '</div></div>';
+      }).join('');
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    })
+    .catch(err => alert('通信エラー: ' + err.message));
+}
+
+function selectSearchResult(jan) {
+  document.getElementById('searchResultsSection').classList.add('hidden');
+  document.getElementById('janInput').value = jan;
+  searchMode = 'jan';
+  document.getElementById('modeJan').classList.add('active');
+  document.getElementById('modeName').classList.remove('active');
+  const input = document.getElementById('janInput');
+  input.type = 'tel'; input.placeholder = 'JANコードを入力'; input.maxLength = 13;
+  searchProduct();
+}
+
+// ===== 商品検索（JAN） =====
 function searchProduct() {
   const jan = document.getElementById('janInput').value.trim();
   if (!jan) return;
   document.getElementById('resultSection').classList.add('hidden');
   document.getElementById('notFoundSection').classList.add('hidden');
   document.getElementById('scanPrompt').classList.add('hidden');
+  document.getElementById('searchResultsSection').classList.add('hidden');
 
   fetch(API + '/api/scan/product?jan=' + encodeURIComponent(jan))
     .then(r => {
