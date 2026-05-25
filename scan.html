@@ -298,6 +298,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
         🔄 FTPデータ同期
       </button>
       <div id="syncStatus" style="margin-top:8px;font-size:12px;color:var(--txt2)"></div>
+      <div id="syncScheduleInfo" style="margin-top:12px;padding:10px;background:#e8f5e9;border-radius:8px;font-size:12px;color:#2e7d32;text-align:left"></div>
     </div>
   </div>
 </div>
@@ -361,7 +362,7 @@ function showTab(tab) {
   document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
   document.getElementById('scanSection').classList.toggle('hidden', tab !== 'scan');
   document.getElementById('statsSection').classList.toggle('hidden', tab !== 'stats');
-  if (tab === 'stats') loadStats();
+  if (tab === 'stats') { loadStats(); loadSyncSchedule(); }
 }
 
 // ===== データタブ切替 =====
@@ -795,6 +796,23 @@ function pollSync() {
       }
     }
   }).catch(() => setTimeout(pollSync, 3000));
+}
+
+// ===== 同期スケジュール表示 =====
+function loadSyncSchedule() {
+  fetch(API + '/api/sync-schedule').then(r => r.json()).then(d => {
+    const el = document.getElementById('syncScheduleInfo');
+    if (!el) return;
+    let html = '🕐 <b>自動同期:</b> ' + (d.schedule || '未設定');
+    if (d.last_sync) html += '<br>📅 前回同期: ' + d.last_sync;
+    if (d.last_result && d.last_result.success) {
+      html += ' ✅';
+    } else if (d.last_result && d.last_result.error) {
+      html += ' ❌ ' + d.last_result.error;
+    }
+    html += '<br>🕐 サーバー時刻(JST): ' + d.current_time_jst;
+    el.innerHTML = html;
+  }).catch(() => {});
 }
 
 // ===== Service Worker =====

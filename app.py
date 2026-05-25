@@ -212,6 +212,21 @@ STORE_NAMES = {
 }
 
 
+# ========== ヘルスチェック ==========
+
+@app.route('/health')
+def health_check():
+    """外部cronサービスからのkeep-alive用。スリープ防止。"""
+    from datetime import timezone, timedelta
+    JST = timezone(timedelta(hours=9))
+    now_jst = datetime.now(JST)
+    return jsonify({
+        'status': 'ok',
+        'time_jst': now_jst.strftime('%Y-%m-%d %H:%M:%S'),
+        'auto_sync': f'毎日 JST {DAILY_SYNC_HOUR_JST}:00',
+    })
+
+
 # ========== HTMLページ ==========
 
 @app.route('/')
@@ -900,6 +915,72 @@ def get_ftp_sync_status():
     })
 
 
+# ========== 日次自動同期スケジューラー ==========
+
+DAILY_SYNC_HOUR_JST = 5  # 日本時間 午前5時に自動同期
+
+def _daily_sync_scheduler():
+    """毎日指定時刻(JST)にFTP同期を自動実行するバックグラウンドスレッド"""
+    import time
+    from datetime import timezone, timedelta
+    JST = timezone(timedelta(hours=9))
+
+    # 起動直後は少し待ってから開始
+    time.sleep(10)
+    print(f"[日次同期] スケジューラー起動 (毎日 JST {DAILY_SYNC_HOUR_JST}:00 に実行)", flush=True)
+
+    last_sync_date = None
+
+    while True:
+        try:
+            now_jst = datetime.now(JST)
+            today_str = now_jst.strftime('%Y-%m-%d')
+
+            # 今日の同期がまだで、指定時刻を過ぎていれば実行
+            if now_jst.hour >= DAILY_SYNC_HOUR_JST and last_sync_date != today_str:
+                # 既に手動同期が実行中なら待つ
+                if _ftp_sync_status['running']:
+                    print(f"[日次同期] 同期実行中のためスキップ、60秒後に再確認", flush=True)
+                    time.sleep(60)
+                    continue
+
+                print(f"[日次同期] {today_str} の自動同期を開始します", flush=True)
+                _ftp_sync_status['log'] = []  # ログクリア
+                try:
+                    _run_ftp_sync()
+                    last_sync_date = today_str
+                    result = _ftp_sync_status.get('last_result', {})
+                    if result.get('success'):
+                        print(f"[日次同期] 完了: 商品{result.get('scan_products',0)} POS{result.get('scan_pos',0)} 受払{result.get('scan_ukebarai',0)} 在庫{result.get('scan_zaiko',0)}", flush=True)
+                    else:
+                        print(f"[日次同期] エラー: {result.get('error','不明')}", flush=True)
+                except Exception as e:
+                    print(f"[日次同期] 実行エラー: {e}", flush=True)
+                    last_sync_date = today_str  # エラーでも今日は再試行しない
+
+            # 次のチェックまで10分待機
+            time.sleep(600)
+
+        except Exception as e:
+            print(f"[日次同期] スケジューラーエラー: {e}", flush=True)
+            time.sleep(600)
+
+
+@app.route('/api/sync-schedule', methods=['GET'])
+def get_sync_schedule():
+    """自動同期スケジュール情報を返す"""
+    from datetime import timezone, timedelta
+    JST = timezone(timedelta(hours=9))
+    now_jst = datetime.now(JST)
+    return jsonify({
+        'enabled': True,
+        'schedule': f'毎日 JST {DAILY_SYNC_HOUR_JST}:00',
+        'current_time_jst': now_jst.strftime('%Y-%m-%d %H:%M:%S'),
+        'last_sync': _ftp_sync_status.get('last_run'),
+        'last_result': _ftp_sync_status.get('last_result'),
+    })
+
+
 # ========== 起動 ==========
 
 if DATABASE_URL:
@@ -922,6 +1003,11 @@ if DATABASE_URL:
 
     _auto_sync_thread = threading.Thread(target=_auto_sync_on_startup, daemon=True)
     _auto_sync_thread.start()
+
+    # 日次自動同期スケジューラーを起動
+    _daily_sync_thread = threading.Thread(target=_daily_sync_scheduler, daemon=True)
+    _daily_sync_thread.start()
+    print(f"[日次同期] スケジューラー登録済み (毎日 JST {DAILY_SYNC_HOUR_JST}:00)", flush=True)
 else:
     print("[警告] DATABASE_URL未設定。PostgreSQLに接続できません。", flush=True)
 
