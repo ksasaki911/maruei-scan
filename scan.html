@@ -124,6 +124,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .scan-prompt .sp-icon{font-size:40px;margin-bottom:6px;opacity:.5}
 .scan-prompt .sp-text{font-size:13px}
 
+/* 次をスキャンボタン（フローティング） */
+.scan-next-btn{position:fixed;bottom:68px;left:50%;transform:translateX(-50%);background:#00c853;color:#fff;border:none;border-radius:24px;padding:10px 24px;font-size:14px;font-weight:700;box-shadow:0 3px 12px rgba(0,200,83,.4);z-index:99;animation:pulseBtn 2s infinite;cursor:pointer}
+@keyframes pulseBtn{0%,100%{transform:translateX(-50%) scale(1)}50%{transform:translateX(-50%) scale(1.05)}}
+
 /* 検索モード切替 */
 .search-mode-tabs{display:flex;gap:0;background:var(--card);border-bottom:1px solid var(--border)}
 .search-mode-tab{flex:1;padding:8px;text-align:center;font-size:12px;font-weight:600;border:none;background:var(--card);color:var(--txt2);cursor:pointer;border-bottom:2px solid transparent}
@@ -280,6 +284,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <div id="qr-reader" style="width:100%;height:200px"></div>
       <div class="scan-hint" id="scanHint">バーコードを枠内に合わせてください</div>
     </div>
+    <!-- カメラ稼働中の補助テキスト -->
+    <div id="cameraStatus" class="hidden" style="text-align:center;padding:6px;font-size:11px;color:var(--green);background:var(--card);border-bottom:1px solid var(--border)">
+      🟢 カメラ稼働中 — 別の商品をスキャンできます
+    </div>
   </div>
 
   <!-- ========== 統計ページ ========== -->
@@ -293,6 +301,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
     </div>
   </div>
 </div>
+
+<!-- 次をスキャンボタン -->
+<button class="scan-next-btn hidden" id="scanNextBtn" onclick="scrollToCamera()">📷 次をスキャン ▼</button>
 
 <div class="bottom-nav">
   <button class="nav-btn active" onclick="showTab('scan')" id="tabScan">
@@ -401,11 +412,14 @@ function startCamera() {
     { facingMode: "environment" }, config,
     (decodedText) => { if (decodedText && decodedText.length >= 8) onBarcodeDetected(decodedText); },
     () => {}
-  ).catch(err => {
+  ).then(() => {
+    document.getElementById('cameraStatus').classList.remove('hidden');
+  }).catch(err => {
     console.error('Camera error:', err);
     document.getElementById('cameraOff').classList.remove('hidden');
     document.getElementById('cameraOn').classList.add('hidden');
     cameraActive = false;
+    document.getElementById('cameraStatus').classList.add('hidden');
     alert('カメラにアクセスできません。手動入力をご利用ください。');
   });
 }
@@ -429,8 +443,21 @@ function onBarcodeDetected(code) {
   document.getElementById('scanHint').textContent = '読取成功: ' + code;
   searchProduct();
 
-  // 5秒後に同じコードを再スキャン可能にする
-  setTimeout(() => { if (lastScannedCode === code) lastScannedCode = ''; }, 5000);
+  // 3秒後に同じコードを再スキャン可能にする
+  setTimeout(() => { if (lastScannedCode === code) lastScannedCode = ''; }, 3000);
+}
+
+function scrollToCamera() {
+  const cam = document.getElementById('cameraOn');
+  if (cam && !cam.classList.contains('hidden')) {
+    cam.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // スキャナーが停止していたら再起動
+    document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+    lastScannedCode = '';  // リセットして即スキャン可能に
+  } else {
+    startCamera();
+  }
+  document.getElementById('scanNextBtn').classList.add('hidden');
 }
 
 function stopCamera() {
@@ -551,6 +578,12 @@ function searchProduct() {
       switchDataTabDirect('pos');
       // 商品情報が見えるようにスクロール
       window.scrollTo({ top: 0, behavior: 'smooth' });
+      // カメラが起動中なら「次をスキャン」ボタンを表示
+      if (cameraActive) {
+        setTimeout(() => {
+          document.getElementById('scanNextBtn').classList.remove('hidden');
+        }, 500);
+      }
     })
     .catch(err => alert('通信エラー: ' + err.message));
 }
