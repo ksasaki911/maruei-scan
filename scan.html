@@ -12,114 +12,117 @@
 *{margin:0;padding:0;box-sizing:border-box}
 :root{--pri:#1a237e;--pri2:#283593;--bg:#f5f5f5;--card:#fff;--txt:#212121;--txt2:#757575;--green:#2e7d32;--red:#c62828;--blue:#1565c0;--amber:#f57f17;--border:#e0e0e0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;background:var(--bg);color:var(--txt);min-height:100vh;-webkit-text-size-adjust:100%}
-.header{background:var(--pri);color:#fff;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
-.header h1{font-size:16px;font-weight:600;letter-spacing:.5px}
+.header{background:var(--pri);color:#fff;padding:10px 16px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.header h1{font-size:15px;font-weight:600;letter-spacing:.5px}
 .header .store-sel{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 8px;font-size:12px}
 .header .store-sel option{color:#000;background:#fff}
 
-/* スキャンエリア */
-.scan-area{background:#000;position:relative;overflow:hidden}
-#qr-reader{width:100%!important}
-#qr-reader video{width:100%!important;object-fit:cover}
-#qr-reader__dashboard{padding:8px!important}
-#qr-reader__dashboard button{background:#1e40af!important;color:#fff!important;border:none!important;padding:8px 16px!important;border-radius:6px!important;font-size:14px!important}
-.scan-hint{position:absolute;bottom:12px;left:0;right:0;text-align:center;color:#fff;font-size:13px;text-shadow:0 1px 3px rgba(0,0,0,.7)}
+/* スキャンエリア（コンパクト版） */
+.scan-area-compact{background:#000;position:relative;overflow:hidden;height:200px}
+#qr-reader{width:100%!important;height:200px!important}
+#qr-reader video{width:100%!important;height:200px!important;object-fit:cover}
+#qr-reader__dashboard{display:none!important}
+.scan-hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#fff;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:10}
 
 /* スキャン成功バナー */
-.scan-success-banner{display:none;background:#2e7d32;color:#fff;padding:10px 16px;text-align:center;font-size:15px;font-weight:700;animation:flashBg .3s ease-in-out}
+.scan-success-banner{display:none;background:#2e7d32;color:#fff;padding:8px 16px;text-align:center;font-size:14px;font-weight:700;animation:flashBg .3s ease-in-out}
 .scan-success-banner.show{display:block}
 @keyframes flashBg{0%{background:#4caf50}50%{background:#1b5e20}100%{background:#2e7d32}}
 
 /* 手動入力 */
-.manual-input{display:flex;gap:8px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}
-.manual-input input{flex:1;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:16px;outline:none}
+.manual-input{display:flex;gap:8px;padding:8px 12px;background:var(--card);border-bottom:1px solid var(--border)}
+.manual-input input{flex:1;border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:16px;outline:none}
 .manual-input input:focus{border-color:var(--pri)}
-.manual-input button{background:var(--pri);color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;font-weight:600;white-space:nowrap}
+.manual-input button{background:var(--pri);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:14px;font-weight:600;white-space:nowrap}
 
 /* 商品情報カード */
-.product-card{margin:12px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
-.product-header{background:var(--pri2);color:#fff;padding:14px 16px}
-.product-header .jan{font-size:12px;opacity:.8;margin-bottom:2px;font-family:monospace;letter-spacing:1px}
-.product-header .name{font-size:18px;font-weight:700;line-height:1.3}
-.product-header .spec{font-size:13px;opacity:.8;margin-top:2px}
+.product-card{margin:8px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
+.product-header{background:var(--pri2);color:#fff;padding:12px 14px}
+.product-header .jan{font-size:11px;opacity:.8;margin-bottom:2px;font-family:monospace;letter-spacing:1px}
+.product-header .name{font-size:17px;font-weight:700;line-height:1.3}
+.product-header .spec{font-size:12px;opacity:.8;margin-top:2px}
 
 .info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--border)}
-.info-cell{padding:12px;text-align:center;border-right:1px solid var(--border)}
+.info-cell{padding:10px;text-align:center;border-right:1px solid var(--border)}
 .info-cell:last-child{border-right:none}
-.info-cell .label{font-size:11px;color:var(--txt2);margin-bottom:4px}
-.info-cell .value{font-size:18px;font-weight:700}
+.info-cell .label{font-size:10px;color:var(--txt2);margin-bottom:3px}
+.info-cell .value{font-size:17px;font-weight:700}
 .info-cell .value.price{color:var(--red)}
 .info-cell .value.cost{color:var(--blue)}
 .info-cell .value.margin{color:var(--green)}
 
-.detail-rows{padding:0 16px}
-.detail-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #f0f0f0;font-size:14px}
+.detail-rows{padding:0 14px}
+.detail-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
 .detail-row:last-child{border-bottom:none}
 .detail-row .dl{color:var(--txt2)}
 .detail-row .dv{font-weight:600}
 
 /* タブ切替 */
-.data-tabs{display:flex;gap:0;margin:12px;background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border)}
-.data-tab{flex:1;padding:10px 4px;text-align:center;font-size:12px;font-weight:600;border:none;background:var(--card);color:var(--txt2);cursor:pointer;border-right:1px solid var(--border)}
+.data-tabs{display:flex;gap:0;margin:8px;background:var(--card);border-radius:8px;overflow:hidden;border:1px solid var(--border)}
+.data-tab{flex:1;padding:8px 4px;text-align:center;font-size:12px;font-weight:600;border:none;background:var(--card);color:var(--txt2);cursor:pointer;border-right:1px solid var(--border)}
 .data-tab:last-child{border-right:none}
 .data-tab.active{background:var(--pri);color:#fff}
 
 /* セクション */
-.section-card{margin:0 12px 12px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
-.section-title{padding:12px 16px;font-size:14px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
+.section-card{margin:0 8px 8px;background:var(--card);border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.08);overflow:hidden}
+.section-title{padding:10px 14px;font-size:13px;font-weight:700;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:6px}
 .weekly-grid{display:grid;grid-template-columns:repeat(4,1fr);text-align:center}
-.wk-col{border-right:1px solid var(--border);padding:10px 4px}
+.wk-col{border-right:1px solid var(--border);padding:8px 4px}
 .wk-col:last-child{border-right:none}
-.wk-col .wh{font-size:11px;color:var(--txt2);margin-bottom:6px}
-.wk-col .wv{font-size:16px;font-weight:700}
-.wk-col .wa{font-size:12px;color:var(--txt2);margin-top:2px}
+.wk-col .wh{font-size:10px;color:var(--txt2);margin-bottom:4px}
+.wk-col .wv{font-size:15px;font-weight:700}
+.wk-col .wa{font-size:11px;color:var(--txt2);margin-top:2px}
 
 /* テーブル */
-.data-table{width:100%;border-collapse:collapse;font-size:12px}
-.data-table th{background:#f5f5f5;padding:8px 4px;text-align:center;font-size:10px;color:var(--txt2);font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0}
-.data-table td{padding:6px 4px;text-align:right;border-bottom:1px solid #f5f5f5}
-.data-table td:first-child{text-align:left;font-family:monospace;font-size:11px}
+.data-table{width:100%;border-collapse:collapse;font-size:11px}
+.data-table th{background:#f5f5f5;padding:6px 3px;text-align:center;font-size:10px;color:var(--txt2);font-weight:600;border-bottom:1px solid var(--border);position:sticky;top:0}
+.data-table td{padding:5px 3px;text-align:right;border-bottom:1px solid #f5f5f5}
+.data-table td:first-child{text-align:left;font-family:monospace;font-size:10px}
 .data-table tr:nth-child(even){background:#fafafa}
 .data-table td.positive{color:var(--green);font-weight:600}
 .data-table td.negative{color:var(--red);font-weight:600}
 
 /* 在庫グリッド */
 .zaiko-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)}
-.zaiko-cell{background:var(--card);padding:10px;text-align:center}
+.zaiko-cell{background:var(--card);padding:8px;text-align:center}
 .zaiko-cell .zl{font-size:10px;color:var(--txt2);margin-bottom:2px}
-.zaiko-cell .zv{font-size:20px;font-weight:700}
+.zaiko-cell .zv{font-size:18px;font-weight:700}
 .zaiko-cell .zv.neg{color:var(--red)}
 .zaiko-cell .zv.pos{color:var(--green)}
 
 /* 店舗タブ */
-.store-tabs{display:flex;gap:4px;padding:8px 16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
-.store-tab{padding:6px 12px;border-radius:16px;font-size:12px;white-space:nowrap;border:1px solid var(--border);background:var(--card);color:var(--txt2);cursor:pointer}
+.store-tabs{display:flex;gap:4px;padding:6px 14px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.store-tab{padding:5px 10px;border-radius:16px;font-size:11px;white-space:nowrap;border:1px solid var(--border);background:var(--card);color:var(--txt2);cursor:pointer}
 .store-tab.active{background:var(--pri);color:#fff;border-color:var(--pri)}
 
 /* ステータス */
-.status-bar{padding:16px;text-align:center;color:var(--txt2);font-size:13px}
-.not-found{margin:40px 16px;text-align:center;padding:32px;background:var(--card);border-radius:12px}
-.not-found .nf-icon{font-size:48px;margin-bottom:12px}
-.not-found .nf-text{font-size:16px;font-weight:600;margin-bottom:4px}
-.not-found .nf-sub{font-size:13px;color:var(--txt2)}
+.status-bar{padding:12px;text-align:center;color:var(--txt2);font-size:12px}
+.not-found{margin:20px 12px;text-align:center;padding:24px;background:var(--card);border-radius:12px}
+.not-found .nf-icon{font-size:40px;margin-bottom:8px}
+.not-found .nf-text{font-size:15px;font-weight:600;margin-bottom:4px}
+.not-found .nf-sub{font-size:12px;color:var(--txt2)}
 
 /* Bottom nav */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;padding:6px 0;padding-bottom:max(6px,env(safe-area-inset-bottom));z-index:100}
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--border);display:flex;padding:4px 0;padding-bottom:max(4px,env(safe-area-inset-bottom));z-index:100}
 .bottom-nav .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:4px;font-size:10px;color:var(--txt2);background:none;border:none}
 .bottom-nav .nav-btn.active{color:var(--pri)}
-.bottom-nav .nav-btn .icon{font-size:22px}
-.content{padding-bottom:70px}
+.bottom-nav .nav-btn .icon{font-size:20px}
+.content{padding-bottom:60px}
 
 /* カメラOFF時 */
-.camera-off{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:40px 16px;background:#1a1a2e;color:#fff}
-.camera-off .cam-icon{font-size:48px;margin-bottom:12px;opacity:.6}
-.camera-off button{background:#00e676;color:#000;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:600;margin-top:12px}
+.camera-off{display:flex;align-items:center;justify-content:center;padding:24px 16px;background:#1a1a2e;color:#fff;height:200px}
+.camera-off button{background:#00e676;color:#000;border:none;border-radius:8px;padding:12px 32px;font-size:15px;font-weight:600}
 
 /* 統計ページ */
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:12px 16px}
-.stat-card{background:var(--card);border-radius:12px;padding:16px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.08)}
-.stat-card .sv{font-size:24px;font-weight:700;color:var(--pri)}
-.stat-card .sl{font-size:12px;color:var(--txt2);margin-top:4px}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:10px 12px}
+.stat-card{background:var(--card);border-radius:12px;padding:14px;text-align:center;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.stat-card .sv{font-size:22px;font-weight:700;color:var(--pri)}
+.stat-card .sl{font-size:11px;color:var(--txt2);margin-top:4px}
+
+/* 初期表示メッセージ */
+.scan-prompt{text-align:center;padding:40px 16px;color:var(--txt2)}
+.scan-prompt .sp-icon{font-size:48px;margin-bottom:8px;opacity:.5}
+.scan-prompt .sp-text{font-size:14px}
 
 .hidden{display:none!important}
 </style>
@@ -143,112 +146,119 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 </div>
 
 <div class="content" id="mainContent">
-  <!-- スキャンエリア -->
+
+  <!-- ========== スキャンタブ ========== -->
   <div id="scanSection">
-    <!-- スキャン成功バナー -->
+
+    <!-- 1) スキャン成功バナー（最上部） -->
     <div class="scan-success-banner" id="scanBanner"></div>
 
-    <div class="camera-off" id="cameraOff">
-      <div class="cam-icon">📷</div>
-      <div>カメラでバーコードをスキャン</div>
-      <button onclick="startCamera()">カメラ起動</button>
-    </div>
-    <div class="scan-area hidden" id="cameraOn">
-      <div id="qr-reader" style="width:100%"></div>
-      <div class="scan-hint" id="scanHint">バーコードを枠内に合わせてください</div>
+    <!-- 2) 商品情報（スキャン後に表示） -->
+    <div id="resultSection" class="hidden">
+      <div class="product-card" id="productCard">
+        <div class="product-header">
+          <div class="jan" id="resJan"></div>
+          <div class="name" id="resName"></div>
+          <div class="spec" id="resSpec"></div>
+        </div>
+        <div class="info-grid">
+          <div class="info-cell"><div class="label">税込売価</div><div class="value price" id="resTaxPrice">-</div></div>
+          <div class="info-cell"><div class="label">原価</div><div class="value cost" id="resCost">-</div></div>
+          <div class="info-cell"><div class="label">値入率</div><div class="value margin" id="resMargin">-</div></div>
+        </div>
+        <div class="detail-rows" id="detailRows"></div>
+      </div>
+
+      <!-- データ切替タブ -->
+      <div class="data-tabs" id="dataTabs">
+        <button class="data-tab active" onclick="switchDataTab('pos')">POS販売</button>
+        <button class="data-tab" onclick="switchDataTab('ukebarai')">受払い</button>
+        <button class="data-tab" onclick="switchDataTab('zaiko')">在庫</button>
+      </div>
+
+      <!-- POS販売タブ -->
+      <div id="posPanel">
+        <div class="section-card">
+          <div class="section-title">📊 週別販売推移</div>
+          <div class="weekly-grid" id="weeklyGrid"></div>
+        </div>
+        <div class="section-card">
+          <div class="section-title">📋 日別販売実績</div>
+          <div class="store-tabs" id="storeTabs"></div>
+          <div style="max-height:250px;overflow-y:auto">
+            <table class="data-table"><thead>
+              <tr><th>日付</th><th>数量</th><th>売上</th><th>値引</th></tr>
+            </thead><tbody id="dailyBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 受払いタブ -->
+      <div id="ukebaraiPanel" class="hidden">
+        <div class="section-card">
+          <div class="section-title">📦 受払い明細</div>
+          <div class="store-tabs" id="ukeStoreTabs"></div>
+          <div style="max-height:350px;overflow-y:auto">
+            <table class="data-table"><thead>
+              <tr><th>日付</th><th>POS</th><th>発注</th><th>仕入</th><th>移入</th><th>移出</th><th>返品</th><th>廃棄</th></tr>
+            </thead><tbody id="ukeBody"></tbody></table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 在庫タブ -->
+      <div id="zaikoPanel" class="hidden">
+        <div class="section-card">
+          <div class="section-title">📦 在庫状況（全店合計）</div>
+          <div class="zaiko-grid" id="zaikoTotal"></div>
+        </div>
+        <div class="section-card">
+          <div class="section-title">🏪 店舗別在庫</div>
+          <div style="max-height:350px;overflow-y:auto">
+            <table class="data-table"><thead>
+              <tr><th>店舗</th><th>前日在</th><th>仕入</th><th>POS</th><th>理論在</th><th>当日在</th></tr>
+            </thead><tbody id="zaikoBody"></tbody></table>
+          </div>
+        </div>
+      </div>
     </div>
 
+    <!-- 未発見 -->
+    <div id="notFoundSection" class="hidden">
+      <div class="not-found">
+        <div class="nf-icon">🔍</div>
+        <div class="nf-text">商品が見つかりません</div>
+        <div class="nf-sub" id="nfJan"></div>
+      </div>
+    </div>
+
+    <!-- スキャン前の初期メッセージ -->
+    <div id="scanPrompt" class="scan-prompt">
+      <div class="sp-icon">👇</div>
+      <div class="sp-text">下のカメラでバーコードをスキャンしてください</div>
+    </div>
+
+    <!-- 3) 手動入力 -->
     <div class="manual-input">
       <input type="tel" id="janInput" placeholder="JANコードを入力" maxlength="13"
              onkeydown="if(event.key==='Enter')searchProduct()">
       <button onclick="searchProduct()">検索</button>
     </div>
-  </div>
 
-  <!-- 結果表示 -->
-  <div id="resultSection" class="hidden">
-    <!-- 商品情報 -->
-    <div class="product-card" id="productCard">
-      <div class="product-header">
-        <div class="jan" id="resJan"></div>
-        <div class="name" id="resName"></div>
-        <div class="spec" id="resSpec"></div>
-      </div>
-      <div class="info-grid">
-        <div class="info-cell"><div class="label">税込売価</div><div class="value price" id="resTaxPrice">-</div></div>
-        <div class="info-cell"><div class="label">原価</div><div class="value cost" id="resCost">-</div></div>
-        <div class="info-cell"><div class="label">値入率</div><div class="value margin" id="resMargin">-</div></div>
-      </div>
-      <div class="detail-rows" id="detailRows"></div>
+    <!-- 4) カメラエリア（下部・コンパクト） -->
+    <div class="camera-off" id="cameraOff">
+      <button onclick="startCamera()">📷 カメラ起動</button>
     </div>
-
-    <!-- データ切替タブ -->
-    <div class="data-tabs" id="dataTabs">
-      <button class="data-tab active" onclick="switchDataTab('pos')">POS販売</button>
-      <button class="data-tab" onclick="switchDataTab('ukebarai')">受払い</button>
-      <button class="data-tab" onclick="switchDataTab('zaiko')">在庫</button>
-    </div>
-
-    <!-- POS販売タブ -->
-    <div id="posPanel">
-      <div class="section-card">
-        <div class="section-title">📊 週別販売推移</div>
-        <div class="weekly-grid" id="weeklyGrid"></div>
-      </div>
-      <div class="section-card">
-        <div class="section-title">📋 日別販売実績</div>
-        <div class="store-tabs" id="storeTabs"></div>
-        <div style="max-height:300px;overflow-y:auto">
-          <table class="data-table"><thead>
-            <tr><th>日付</th><th>数量</th><th>売上</th><th>値引</th></tr>
-          </thead><tbody id="dailyBody"></tbody></table>
-        </div>
-      </div>
-    </div>
-
-    <!-- 受払いタブ -->
-    <div id="ukebaraiPanel" class="hidden">
-      <div class="section-card">
-        <div class="section-title">📦 受払い明細</div>
-        <div class="store-tabs" id="ukeStoreTabs"></div>
-        <div style="max-height:400px;overflow-y:auto">
-          <table class="data-table"><thead>
-            <tr><th>日付</th><th>POS</th><th>発注</th><th>仕入</th><th>移入</th><th>移出</th><th>返品</th><th>廃棄</th></tr>
-          </thead><tbody id="ukeBody"></tbody></table>
-        </div>
-      </div>
-    </div>
-
-    <!-- 在庫タブ -->
-    <div id="zaikoPanel" class="hidden">
-      <div class="section-card">
-        <div class="section-title">📦 在庫状況（全店合計）</div>
-        <div class="zaiko-grid" id="zaikoTotal"></div>
-      </div>
-      <div class="section-card">
-        <div class="section-title">🏪 店舗別在庫</div>
-        <div style="max-height:400px;overflow-y:auto">
-          <table class="data-table"><thead>
-            <tr><th>店舗</th><th>前日在</th><th>仕入</th><th>POS</th><th>理論在</th><th>当日在</th></tr>
-          </thead><tbody id="zaikoBody"></tbody></table>
-        </div>
-      </div>
+    <div class="scan-area-compact hidden" id="cameraOn">
+      <div id="qr-reader" style="width:100%;height:200px"></div>
+      <div class="scan-hint" id="scanHint">バーコードを枠内に合わせてください</div>
     </div>
   </div>
 
-  <!-- 未発見 -->
-  <div id="notFoundSection" class="hidden">
-    <div class="not-found">
-      <div class="nf-icon">🔍</div>
-      <div class="nf-text">商品が見つかりません</div>
-      <div class="nf-sub" id="nfJan"></div>
-    </div>
-  </div>
-
-  <!-- 統計ページ -->
-  <div id="statsSection" class="hidden" style="padding-top:12px">
+  <!-- ========== 統計ページ ========== -->
+  <div id="statsSection" class="hidden" style="padding-top:8px">
     <div class="stats-grid" id="statsGrid"></div>
-    <div style="padding:16px;text-align:center">
+    <div style="padding:12px;text-align:center">
       <button onclick="triggerFtpSync()" style="background:var(--pri);color:#fff;border:none;border-radius:8px;padding:12px 32px;font-size:14px;font-weight:600" id="syncBtn">
         🔄 FTPデータ同期
       </button>
@@ -285,7 +295,7 @@ function playBeep() {
     osc.frequency.value = 1200;
     gain.gain.value = 0.3;
     osc.start();
-    osc.stop(ctx.currentTime + 0.15);
+    osc.stop(ctx.currentTime + 0.12);
     setTimeout(() => {
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
@@ -294,16 +304,16 @@ function playBeep() {
       osc2.frequency.value = 1600;
       gain2.gain.value = 0.3;
       osc2.start();
-      osc2.stop(ctx.currentTime + 0.15);
-    }, 150);
+      osc2.stop(ctx.currentTime + 0.12);
+    }, 120);
   } catch(e) {}
 }
 
 function showScanBanner(code) {
   const banner = document.getElementById('scanBanner');
-  banner.textContent = '✅ 読取成功: ' + code;
+  banner.textContent = '✅ ' + code;
   banner.classList.add('show');
-  setTimeout(() => banner.classList.remove('show'), 2000);
+  setTimeout(() => banner.classList.remove('show'), 1500);
 }
 
 // ===== タブ切替 =====
@@ -311,8 +321,6 @@ function showTab(tab) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
   document.getElementById('scanSection').classList.toggle('hidden', tab !== 'scan');
-  document.getElementById('resultSection').classList.toggle('hidden', tab !== 'scan' || !currentJan);
-  document.getElementById('notFoundSection').classList.add('hidden');
   document.getElementById('statsSection').classList.toggle('hidden', tab !== 'stats');
   if (tab === 'stats') loadStats();
 }
@@ -326,6 +334,16 @@ function switchDataTab(tab) {
   document.getElementById('zaikoPanel').classList.toggle('hidden', tab !== 'zaiko');
   if (tab === 'ukebarai' && currentJan) loadUkebarai(currentJan);
   if (tab === 'zaiko' && currentJan) loadZaiko(currentJan);
+}
+
+function switchDataTabDirect(tab) {
+  document.querySelectorAll('.data-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.data-tab').forEach(b => {
+    if(b.textContent.includes(tab==='pos'?'POS':tab==='ukebarai'?'受払':'在庫')) b.classList.add('active');
+  });
+  document.getElementById('posPanel').classList.toggle('hidden', tab !== 'pos');
+  document.getElementById('ukebaraiPanel').classList.toggle('hidden', tab !== 'ukebarai');
+  document.getElementById('zaikoPanel').classList.toggle('hidden', tab !== 'zaiko');
 }
 
 function onStoreChange() {
@@ -344,7 +362,7 @@ function startCamera() {
   html5QrCode = new Html5Qrcode("qr-reader");
   cameraActive = true;
   const config = {
-    fps: 10, qrbox: { width: 280, height: 120 },
+    fps: 10, qrbox: { width: 250, height: 100 },
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
       Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
@@ -369,16 +387,22 @@ let lastScannedTime = 0;
 
 function onBarcodeDetected(code) {
   const now = Date.now();
-  if (code === lastScannedCode && now - lastScannedTime < 2000) return;
+  // 同じコードは3秒間無視、違うコードは即座に反応
+  if (code === lastScannedCode && now - lastScannedTime < 3000) return;
   lastScannedCode = code;
   lastScannedTime = now;
+
   // フィードバック
   playBeep();
   if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
   showScanBanner(code);
+
   document.getElementById('janInput').value = code;
   document.getElementById('scanHint').textContent = '読取成功: ' + code;
   searchProduct();
+
+  // 5秒後に同じコードを再スキャン可能にする
+  setTimeout(() => { if (lastScannedCode === code) lastScannedCode = ''; }, 5000);
 }
 
 function stopCamera() {
@@ -394,6 +418,7 @@ function searchProduct() {
   if (!jan) return;
   document.getElementById('resultSection').classList.add('hidden');
   document.getElementById('notFoundSection').classList.add('hidden');
+  document.getElementById('scanPrompt').classList.add('hidden');
 
   fetch(API + '/api/scan/product?jan=' + encodeURIComponent(jan))
     .then(r => {
@@ -410,18 +435,11 @@ function searchProduct() {
       currentJan = jan;
       displayProduct(data);
       loadHistory(jan);
-      // デフォルトでPOSタブを表示
       switchDataTabDirect('pos');
+      // 商品情報が見えるようにスクロール
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     })
     .catch(err => alert('通信エラー: ' + err.message));
-}
-
-function switchDataTabDirect(tab) {
-  document.querySelectorAll('.data-tab').forEach(b => b.classList.remove('active'));
-  document.querySelectorAll('.data-tab').forEach(b => { if(b.textContent.includes(tab==='pos'?'POS':tab==='ukebarai'?'受払':'在庫')) b.classList.add('active'); });
-  document.getElementById('posPanel').classList.toggle('hidden', tab !== 'pos');
-  document.getElementById('ukebaraiPanel').classList.toggle('hidden', tab !== 'ukebarai');
-  document.getElementById('zaikoPanel').classList.toggle('hidden', tab !== 'zaiko');
 }
 
 // ===== 商品情報表示 =====
@@ -459,7 +477,7 @@ function loadHistory(jan) {
 function displayWeekly(weekly) {
   const grid = document.getElementById('weeklyGrid');
   if (!weekly.length) {
-    grid.innerHTML = '<div style="grid-column:1/-1;padding:16px;text-align:center;color:var(--txt2);font-size:13px">販売データなし</div>';
+    grid.innerHTML = '<div style="grid-column:1/-1;padding:12px;text-align:center;color:var(--txt2);font-size:12px">販売データなし</div>';
     return;
   }
   grid.innerHTML = weekly.map(w =>
@@ -492,7 +510,7 @@ function renderDailyTable(store) {
   } else {
     rows = (window._dailyDetail||[]).filter(r => r.store_code===store).map(r => ({date:r.date, qty:r.sales_qty, amount:r.sales_amount, discount:r.discount_amount}));
   }
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--txt2);padding:16px">データなし</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--txt2);padding:12px">データなし</td></tr>'; return; }
   body.innerHTML = rows.map(r => {
     const d = r.date.length===8 ? r.date.substring(4,6)+'/'+r.date.substring(6,8) : r.date.substring(5).replace('-','/');
     return '<tr><td>'+d+'</td><td>'+r.qty+'</td><td>¥'+r.amount.toLocaleString()+'</td><td>'+(r.discount>0?'¥'+r.discount.toLocaleString():'-')+'</td></tr>';
@@ -509,7 +527,6 @@ function loadUkebarai(jan) {
 }
 
 function displayUkebarai(rows, storeNames) {
-  // 店舗タブ
   const tabs = document.getElementById('ukeStoreTabs');
   const stores = [...new Set(rows.map(r => r.store_code))].sort((a,b) => Number(a)-Number(b));
   tabs.innerHTML = '<div class="store-tab active" onclick="filterUkeStore(this,\'\')">全店</div>' +
@@ -528,7 +545,7 @@ function renderUkeTable(store) {
   const body = document.getElementById('ukeBody');
   let rows = window._ukeData || [];
   if (store) rows = rows.filter(r => r.store_code === store);
-  if (!rows.length) { body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--txt2);padding:16px">受払いデータなし</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--txt2);padding:12px">受払いデータなし</td></tr>'; return; }
   body.innerHTML = rows.map(r => {
     const d = r.date.length===8 ? r.date.substring(4,6)+'/'+r.date.substring(6,8) : r.date;
     function cellClass(v) { return v > 0 ? ' class="positive"' : (v < 0 ? ' class="negative"' : ''); }
@@ -565,7 +582,7 @@ function displayZaiko(data) {
 
   const body = document.getElementById('zaikoBody');
   const stores = data.stores || [];
-  if (!stores.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:16px">在庫データなし</td></tr>'; return; }
+  if (!stores.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:12px">在庫データなし</td></tr>'; return; }
   body.innerHTML = stores.map(r => {
     function cellClass(v) { return v < 0 ? ' class="negative"' : (v > 0 ? ' class="positive"' : ''); }
     const sn = (r.store_name||'').replace(/　+/g,'').trim();
