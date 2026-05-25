@@ -572,11 +572,11 @@ def _sync_products(tmpdir, downloaded):
         for r in _read_sjis_csv(downloaded['baika'], 7):
             jan = _jp_strip(r[0])
             if jan in products:
-                cost_rate = float(r[3]) if r[3] else 0
+                cost_val = _to_num(r[3])
                 sell = _to_num(r[4])
                 tax_price = _to_num(r[6])
-                if sell > 0 and cost_rate > 0:
-                    products[jan]['cost'] = round(sell * cost_rate / 100, 2)
+                if cost_val > 0:
+                    products[jan]['cost'] = cost_val
                 if tax_price > 0:
                     products[jan]['tax_price'] = tax_price
                 if sell > 0 and products[jan]['sell_price'] == 0:
