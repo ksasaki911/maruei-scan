@@ -117,8 +117,21 @@ def ensure_tables():
         disposal_qty INTEGER DEFAULT 0,
         col14 INTEGER DEFAULT 0,
         col15 INTEGER DEFAULT 0,
+        ext_purchase_cost REAL DEFAULT 0,
+        ext_purchase_sell REAL DEFAULT 0,
+        ext_purchase_qty REAL DEFAULT 0,
+        ext_return_cost REAL DEFAULT 0,
+        ext_return_sell REAL DEFAULT 0,
+        ext_return_qty REAL DEFAULT 0,
         PRIMARY KEY (date, store_code, jan)
     )""")
+    # 外部仕入カラム追加（既存テーブル対応）
+    for col in ['ext_purchase_cost','ext_purchase_sell','ext_purchase_qty',
+                'ext_return_cost','ext_return_sell','ext_return_qty']:
+        try:
+            cur.execute(f"ALTER TABLE t_scan_ukebarai ADD COLUMN {col} REAL DEFAULT 0")
+        except Exception:
+            pass  # 既に存在する場合
 
     # 在庫
     cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_zaiko (
@@ -420,7 +433,9 @@ def scan_ukebarai():
 
     query = """SELECT date, store_code, product_name, sell_price, cost_price,
                pos_qty, order_qty, purchase_qty, transfer_in_qty,
-               transfer_out_qty, return_qty, disposal_qty
+               transfer_out_qty, return_qty, disposal_qty,
+               COALESCE(ext_purchase_qty, 0) as ext_purchase_qty,
+               COALESCE(ext_return_qty, 0) as ext_return_qty
                FROM t_scan_ukebarai WHERE jan = %s"""
     params = [jan]
 
@@ -433,6 +448,9 @@ def scan_ukebarai():
 
     for r in rows:
         r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
+        # インストア仕入(r[8]) + 外部仕入(r[17]) を合算
+        r['purchase_qty'] = (r.get('purchase_qty') or 0) + int(r.get('ext_purchase_qty') or 0)
+        r['return_qty'] = (r.get('return_qty') or 0) + int(r.get('ext_return_qty') or 0)
 
     return jsonify({'jan': jan, 'data': rows, 'store_names': STORE_NAMES})
 
@@ -764,12 +782,23 @@ def _sync_ukebarai(tmpdir, downloaded):
         if len(jan) < 3:
             continue
         dates_seen.add(date)
+
+        # r[15]-r[20]: 外部仕入・返品（NB商品のベンダー納品/返品）
+        ext_purchase_cost = _to_num(r[15]) if len(r) > 15 else 0
+        ext_purchase_sell = _to_num(r[16]) if len(r) > 16 else 0
+        ext_purchase_qty = _to_num(r[17]) if len(r) > 17 else 0
+        ext_return_cost = _to_num(r[18]) if len(r) > 18 else 0
+        ext_return_sell = _to_num(r[19]) if len(r) > 19 else 0
+        ext_return_qty = _to_num(r[20]) if len(r) > 20 else 0
+
         rows_batch.append((
             date, store, jan, _jp_strip(r[3]),
             _to_num(r[4]), _to_num(r[5]),
             _to_num(r[6]), _to_num(r[7]), _to_num(r[8]),
             _to_num(r[9]), _to_num(r[10]), _to_num(r[11]),
-            _to_num(r[12]), _to_num(r[13]), _to_num(r[14])
+            _to_num(r[12]), _to_num(r[13]), _to_num(r[14]),
+            ext_purchase_cost, ext_purchase_sell, ext_purchase_qty,
+            ext_return_cost, ext_return_sell, ext_return_qty
         ))
         count += 1
 
@@ -781,8 +810,10 @@ def _sync_ukebarai(tmpdir, downloaded):
         cur.execute("""INSERT INTO t_scan_ukebarai
             (date, store_code, jan, product_name, sell_price, cost_price,
              pos_qty, order_qty, purchase_qty, transfer_in_qty,
-             transfer_out_qty, return_qty, disposal_qty, col14, col15)
-            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", row)
+             transfer_out_qty, return_qty, disposal_qty, col14, col15,
+             ext_purchase_cost, ext_purchase_sell, ext_purchase_qty,
+             ext_return_cost, ext_return_sell, ext_return_qty)
+            VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""", row)
 
     conn.commit()
     total = query_one("SELECT COUNT(*) as cnt FROM t_scan_ukebarai")
