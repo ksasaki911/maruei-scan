@@ -212,18 +212,56 @@ STORE_NAMES = {
 }
 
 
-# ========== ヘルスチェック ==========
+# ========== ヘルスチェック + 自動同期トリガー ==========
 
-@app.route('/health')
-def health_check():
-    """外部cronサービスからのkeep-alive用。スリープ防止。"""
+def _check_and_trigger_sync():
+    """今日の同期がまだ完了していなければバックグラウンドで同期開始"""
     from datetime import timezone, timedelta
     JST = timezone(timedelta(hours=9))
     now_jst = datetime.now(JST)
+
+    # 指定時刻前なら何もしない
+    if now_jst.hour < DAILY_SYNC_HOUR_JST:
+        return 'before_schedule'
+
+    # 既に実行中なら何もしない
+    if _ftp_sync_status['running']:
+        return 'already_running'
+
+    # 今日既に成功済みか確認（last_resultのfinished_atが今日ならスキップ）
+    last = _ftp_sync_status.get('last_result')
+    if last and last.get('success') and last.get('finished_at'):
+        finished = last['finished_at'][:10]  # 'YYYY-MM-DD'
+        today_str = now_jst.strftime('%Y-%m-%d')
+        if finished == today_str:
+            return 'already_done_today'
+
+    # 同期開始
+    print(f"[自動同期] /health トリガーで同期開始 ({now_jst.strftime('%Y-%m-%d %H:%M')})", flush=True)
+    t = threading.Thread(target=_run_ftp_sync, daemon=True)
+    t.start()
+    return 'sync_started'
+
+
+@app.route('/health')
+def health_check():
+    """外部cronサービスからのkeep-alive用。同期が必要なら自動トリガー。"""
+    from datetime import timezone, timedelta
+    JST = timezone(timedelta(hours=9))
+    now_jst = datetime.now(JST)
+
+    sync_action = 'disabled'
+    if DATABASE_URL and FTP_HOST:
+        try:
+            sync_action = _check_and_trigger_sync()
+        except Exception as e:
+            sync_action = f'error: {e}'
+
     return jsonify({
         'status': 'ok',
         'time_jst': now_jst.strftime('%Y-%m-%d %H:%M:%S'),
         'auto_sync': f'毎日 JST {DAILY_SYNC_HOUR_JST}:00',
+        'sync_action': sync_action,
     })
 
 
