@@ -433,9 +433,7 @@ def scan_ukebarai():
 
     query = """SELECT date, store_code, product_name, sell_price, cost_price,
                pos_qty, order_qty, purchase_qty, transfer_in_qty,
-               transfer_out_qty, return_qty, disposal_qty,
-               COALESCE(ext_purchase_qty, 0) as ext_purchase_qty,
-               COALESCE(ext_return_qty, 0) as ext_return_qty
+               transfer_out_qty, return_qty, disposal_qty
                FROM t_scan_ukebarai WHERE jan = %s"""
     params = [jan]
 
@@ -448,9 +446,6 @@ def scan_ukebarai():
 
     for r in rows:
         r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
-        # インストア仕入(r[8]) + 外部仕入(r[17]) を合算
-        r['purchase_qty'] = (r.get('purchase_qty') or 0) + int(r.get('ext_purchase_qty') or 0)
-        r['return_qty'] = (r.get('return_qty') or 0) + int(r.get('ext_return_qty') or 0)
 
     return jsonify({'jan': jan, 'data': rows, 'store_names': STORE_NAMES})
 
@@ -775,7 +770,7 @@ def _sync_ukebarai(tmpdir, downloaded):
 
     dates_seen = set()
     rows_batch = []
-    for r in _read_sjis_csv(downloaded['ukebarai'], 15):
+    for r in _read_sjis_csv(downloaded['ukebarai'], 7):
         date = _jp_strip(r[0])
         store = _jp_strip(r[1])
         jan = _jp_strip(r[2])
@@ -783,22 +778,40 @@ def _sync_ukebarai(tmpdir, downloaded):
             continue
         dates_seen.add(date)
 
-        # r[15]-r[20]: 外部仕入・返品（NB商品のベンダー納品/返品）
-        ext_purchase_cost = _to_num(r[15]) if len(r) > 15 else 0
-        ext_purchase_sell = _to_num(r[16]) if len(r) > 16 else 0
-        ext_purchase_qty = _to_num(r[17]) if len(r) > 17 else 0
-        ext_return_cost = _to_num(r[18]) if len(r) > 18 else 0
-        ext_return_sell = _to_num(r[19]) if len(r) > 19 else 0
-        ext_return_qty = _to_num(r[20]) if len(r) > 20 else 0
+        # === CHAINS受払いCSV 30列 正確なカラムマッピング ===
+        # （Excelヘッダー「日別受払いデータ」より確定）
+        # r[0]=日付  r[1]=店コード  r[2]=代表スキャニングコード  r[3]=商品名
+        # r[4]=売上金額  r[5]=売上原価金額  r[6]=売上数量
+        # r[7]=買上客数
+        # r[8]=廃棄金額  r[9]=廃棄原価金額  r[10]=廃棄数量
+        # r[11]=値引金額  r[12]=値引数量
+        # r[13]=値上金額  r[14]=値上数量
+        # r[15]=仕入原価金額  r[16]=仕入売価金額  r[17]=仕入数量
+        # r[18]=仕入返品原価金額  r[19]=仕入返品売価金額  r[20]=仕入返品数量
+        # r[21]=店間移動原価金額  r[22]=店間移動売価金額  r[23]=店間移動数量
+        # r[24]=部門移動原価金額  r[25]=部門移動売価金額  r[26]=部門移動数量
+        # r[27]=総仕入原価金額  r[28]=総仕入売価金額  r[29]=総仕入数量
+
+        pos_qty = _to_num(r[6]) if len(r) > 6 else 0       # 売上数量
+        order_qty = _to_num(r[7]) if len(r) > 7 else 0     # 買上客数(order_qtyカラムに格納)
+        purchase_qty = int(_to_num(r[17])) if len(r) > 17 else 0    # 仕入数量
+        transfer_in_qty = int(_to_num(r[23])) if len(r) > 23 else 0 # 店間移動数量
+        transfer_out_qty = int(_to_num(r[26])) if len(r) > 26 else 0 # 部門移動数量
+        return_qty = int(_to_num(r[20])) if len(r) > 20 else 0      # 仕入返品数量
+        disposal_qty = _to_num(r[10]) if len(r) > 10 else 0  # 廃棄数量 ※r[10]が正しい
+        markdown_amount = _to_num(r[11]) if len(r) > 11 else 0  # 値引金額
+        markdown_qty = _to_num(r[12]) if len(r) > 12 else 0     # 値引数量
 
         rows_batch.append((
             date, store, jan, _jp_strip(r[3]),
-            _to_num(r[4]), _to_num(r[5]),
-            _to_num(r[6]), _to_num(r[7]), _to_num(r[8]),
-            _to_num(r[9]), _to_num(r[10]), _to_num(r[11]),
-            _to_num(r[12]), _to_num(r[13]), _to_num(r[14]),
-            ext_purchase_cost, ext_purchase_sell, ext_purchase_qty,
-            ext_return_cost, ext_return_sell, ext_return_qty
+            _to_num(r[4]), _to_num(r[5]),           # sell_price, cost_price
+            pos_qty, order_qty, purchase_qty,
+            transfer_in_qty, transfer_out_qty, return_qty,
+            disposal_qty, markdown_amount, markdown_qty,
+            # ext_purchase_cost/sell/qty → 0 (purchase_qtyに直接格納済み)
+            0, 0, 0,
+            # ext_return_cost/sell/qty → 0 (return_qtyに直接格納済み)
+            0, 0, 0,
         ))
         count += 1
 
