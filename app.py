@@ -481,6 +481,57 @@ def scan_zaiko():
     return jsonify({'jan': jan, 'stores': rows, 'total': total})
 
 
+# ========== デバッグ: 受払い生データ確認 ==========
+
+@app.route('/api/scan/debug_ukebarai', methods=['GET'])
+def debug_ukebarai():
+    """受払いDBの生データ確認（デバッグ用）"""
+    # 仕入数量 > 0 のデータを探す
+    rows_with_purchase = query_rows("""
+        SELECT date, store_code, jan, product_name,
+               sell_price, cost_price, pos_qty, order_qty,
+               purchase_qty, transfer_in_qty, transfer_out_qty,
+               return_qty, disposal_qty, col14, col15,
+               ext_purchase_cost, ext_purchase_sell, ext_purchase_qty,
+               ext_return_cost, ext_return_sell, ext_return_qty
+        FROM t_scan_ukebarai
+        WHERE purchase_qty > 0
+        ORDER BY date DESC
+        LIMIT 10
+    """)
+    # 全データサンプル（先頭10件）
+    sample_rows = query_rows("""
+        SELECT date, store_code, jan, product_name,
+               sell_price, cost_price, pos_qty, order_qty,
+               purchase_qty, transfer_in_qty, transfer_out_qty,
+               return_qty, disposal_qty, col14, col15
+        FROM t_scan_ukebarai
+        ORDER BY date DESC
+        LIMIT 10
+    """)
+    # 各カラムの非0件数
+    col_stats = query_one("""
+        SELECT
+            COUNT(*) as total_rows,
+            SUM(CASE WHEN pos_qty != 0 THEN 1 ELSE 0 END) as has_pos_qty,
+            SUM(CASE WHEN order_qty != 0 THEN 1 ELSE 0 END) as has_order_qty,
+            SUM(CASE WHEN purchase_qty != 0 THEN 1 ELSE 0 END) as has_purchase_qty,
+            SUM(CASE WHEN transfer_in_qty != 0 THEN 1 ELSE 0 END) as has_transfer_in,
+            SUM(CASE WHEN transfer_out_qty != 0 THEN 1 ELSE 0 END) as has_transfer_out,
+            SUM(CASE WHEN return_qty != 0 THEN 1 ELSE 0 END) as has_return_qty,
+            SUM(CASE WHEN disposal_qty != 0 THEN 1 ELSE 0 END) as has_disposal_qty,
+            SUM(CASE WHEN col14 != 0 THEN 1 ELSE 0 END) as has_col14,
+            SUM(CASE WHEN col15 != 0 THEN 1 ELSE 0 END) as has_col15,
+            SUM(CASE WHEN ext_purchase_qty != 0 THEN 1 ELSE 0 END) as has_ext_purchase
+        FROM t_scan_ukebarai
+    """)
+    return jsonify({
+        'column_stats': col_stats,
+        'rows_with_purchase': rows_with_purchase,
+        'sample_rows': sample_rows,
+    })
+
+
 # ========== 統計API ==========
 
 @app.route('/api/scan/stores', methods=['GET'])
@@ -764,6 +815,15 @@ def _sync_ukebarai(tmpdir, downloaded):
         return 0
 
     _ftp_log("受払い(ukebarai.csv) 読込中...")
+
+    # デバッグ: CSVの先頭3行をログに出力してカラム構造を確認
+    debug_count = 0
+    for r in _read_sjis_csv(downloaded['ukebarai'], 4):
+        _ftp_log(f"[CSV構造確認] 行{debug_count}: 列数={len(r)}, データ={r[:30]}")
+        debug_count += 1
+        if debug_count >= 3:
+            break
+
     count = 0
     conn = get_db()
     cur = conn.cursor()
