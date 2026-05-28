@@ -17,12 +17,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .header .store-sel{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:6px;padding:4px 8px;font-size:12px}
 .header .store-sel option{color:#000;background:#fff}
 
-/* スキャンエリア（コンパクト版） */
-.scan-area-compact{background:#000;position:relative;overflow:hidden;height:200px}
-#qr-reader{width:100%!important;height:200px!important}
-#qr-reader video{width:100%!important;height:200px!important;object-fit:cover}
+/* スキャンエリア（大きめ版 — スマホでもフォーカスが合いやすいサイズ） */
+.scan-area-compact{background:#000;position:relative;overflow:hidden;height:280px}
+#qr-reader{width:100%!important;height:280px!important}
+#qr-reader video{width:100%!important;height:280px!important;object-fit:cover}
 #qr-reader__dashboard{display:none!important}
-.scan-hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#fff;font-size:12px;text-shadow:0 1px 3px rgba(0,0,0,.7);z-index:10}
+#qr-reader__scan_region{display:flex!important;align-items:center!important;justify-content:center!important}
+#qr-reader img[alt="Info icon"]{display:none!important}
+.scan-hint{position:absolute;bottom:8px;left:0;right:0;text-align:center;color:#fff;font-size:14px;font-weight:600;text-shadow:0 1px 4px rgba(0,0,0,.9);z-index:10}
 
 /* スキャン成功バナー */
 .scan-success-banner{display:none;background:#2e7d32;color:#fff;padding:8px 16px;text-align:center;font-size:14px;font-weight:700;animation:flashBg .3s ease-in-out}
@@ -149,91 +151,96 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 
 /* ========== スマホ用レスポンシブ (max-width: 768px) ========== */
 @media (max-width: 768px) {
-  body{font-size:16px}
+  body{font-size:18px!important}
 
   /* ヘッダー */
-  .header{padding:12px 16px}
-  .header h1{font-size:18px}
-  .header .store-sel{font-size:15px;padding:6px 10px}
+  .header{padding:14px 16px!important}
+  .header h1{font-size:20px!important;font-weight:700!important}
+  .header .store-sel{font-size:17px!important;padding:8px 12px!important}
 
   /* 手動入力 */
-  .manual-input{padding:10px 12px;gap:10px}
-  .manual-input input{font-size:18px;padding:12px 14px}
-  .manual-input button{font-size:16px;padding:12px 18px}
+  .manual-input{padding:12px 14px!important;gap:10px}
+  .manual-input input{font-size:20px!important;padding:14px 16px!important;border-radius:10px!important}
+  .manual-input button{font-size:18px!important;padding:14px 22px!important;border-radius:10px!important}
 
   /* 検索モード切替 */
-  .search-mode-tab{font-size:15px;padding:12px}
+  .search-mode-tab{font-size:17px!important;padding:14px!important}
 
   /* 商品カード */
-  .product-header{padding:14px 16px}
-  .product-header .jan{font-size:13px}
-  .product-header .name{font-size:20px}
-  .product-header .spec{font-size:14px}
-  .info-cell{padding:14px 6px}
-  .info-cell .label{font-size:12px}
-  .info-cell .value{font-size:22px}
-  .detail-rows{padding:0 16px}
-  .detail-row{font-size:15px;padding:10px 0}
+  .product-header{padding:16px 18px!important}
+  .product-header .jan{font-size:15px!important}
+  .product-header .name{font-size:24px!important;font-weight:700!important}
+  .product-header .spec{font-size:16px!important}
+  .info-cell{padding:16px 8px!important}
+  .info-cell .label{font-size:14px!important}
+  .info-cell .value{font-size:26px!important;font-weight:800!important}
+  .detail-rows{padding:0 18px!important}
+  .detail-row{font-size:17px!important;padding:12px 0!important}
 
   /* データタブ */
-  .data-tabs{margin:10px 8px}
-  .data-tab{font-size:14px;padding:12px 4px}
+  .data-tabs{margin:12px 8px!important}
+  .data-tab{font-size:16px!important;padding:14px 6px!important;font-weight:600!important}
 
   /* セクション */
-  .section-title{font-size:15px;padding:12px 14px}
-  .wk-col .wh{font-size:12px}
-  .wk-col .wv{font-size:18px}
-  .wk-col .wa{font-size:13px}
+  .section-title{font-size:17px!important;padding:14px 16px!important;font-weight:700!important}
+  .wk-col .wh{font-size:13px!important}
+  .wk-col .wv{font-size:22px!important;font-weight:700!important}
+  .wk-col .wa{font-size:14px!important}
 
   /* テーブル */
-  .data-table{font-size:14px}
-  .data-table th{font-size:12px;padding:10px 4px}
-  .data-table td{padding:8px 4px;font-size:14px}
-  .data-table td:first-child{font-size:13px}
+  .data-table{font-size:16px!important}
+  .data-table th{font-size:14px!important;padding:12px 6px!important;font-weight:700!important}
+  .data-table td{padding:10px 6px!important;font-size:16px!important}
+  .data-table td:first-child{font-size:15px!important}
 
   /* 在庫グリッド */
-  .zaiko-cell{padding:12px}
-  .zaiko-cell .zl{font-size:12px}
-  .zaiko-cell .zv{font-size:22px}
+  .zaiko-cell{padding:14px!important}
+  .zaiko-cell .zl{font-size:14px!important}
+  .zaiko-cell .zv{font-size:26px!important;font-weight:700!important}
 
   /* 店舗タブ */
-  .store-tab{font-size:13px;padding:8px 14px}
+  .store-tab{font-size:15px!important;padding:10px 16px!important}
 
   /* 統計 */
-  .stat-card{padding:16px}
-  .stat-card .sv{font-size:26px}
-  .stat-card .sl{font-size:13px}
+  .stat-card{padding:18px!important}
+  .stat-card .sv{font-size:30px!important;font-weight:800!important}
+  .stat-card .sl{font-size:15px!important}
 
   /* 下部ナビ */
-  .bottom-nav .nav-btn{font-size:12px;padding:6px}
-  .bottom-nav .nav-btn .icon{font-size:24px}
-  .content{padding-bottom:70px}
+  .bottom-nav .nav-btn{font-size:14px!important;padding:8px!important}
+  .bottom-nav .nav-btn .icon{font-size:28px!important}
+  .content{padding-bottom:80px!important}
 
   /* 次をスキャン */
-  .scan-next-btn{font-size:16px;padding:14px 28px;bottom:76px}
+  .scan-next-btn{font-size:18px!important;padding:16px 32px!important;bottom:86px!important}
 
   /* 検索結果 */
-  .search-result-item{padding:12px 16px}
-  .search-result-item .sr-name{font-size:16px}
-  .search-result-item .sr-sub{font-size:13px}
-  .search-result-item .sr-prices{font-size:15px}
-  .search-count{font-size:13px}
+  .search-result-item{padding:14px 18px!important}
+  .search-result-item .sr-name{font-size:18px!important;font-weight:600!important}
+  .search-result-item .sr-sub{font-size:15px!important}
+  .search-result-item .sr-prices{font-size:17px!important}
+  .search-count{font-size:15px!important}
 
   /* 未発見 */
-  .not-found .nf-text{font-size:18px}
-  .not-found .nf-sub{font-size:14px}
+  .not-found .nf-text{font-size:22px!important;font-weight:700!important}
+  .not-found .nf-sub{font-size:16px!important}
 
   /* 初期表示 */
-  .scan-prompt .sp-text{font-size:15px}
+  .scan-prompt .sp-text{font-size:18px!important}
 
   /* カメラOFF */
-  .camera-off button{font-size:18px;padding:16px 36px}
+  .camera-off button{font-size:22px!important;padding:20px 44px!important}
 
   /* カメラヒント */
-  .scan-hint{font-size:14px}
+  .scan-hint{font-size:16px!important}
 
   /* カメラステータス */
-  #cameraStatus{font-size:13px;padding:8px}
+  #cameraStatus{font-size:15px!important;padding:10px!important}
+
+  /* カメラエリア拡大 */
+  .scan-area-compact{height:300px!important}
+  #qr-reader{height:300px!important}
+  #qr-reader video{height:300px!important}
 }
 
 /* ========== PC用 (min-width: 769px) ========== */
@@ -388,7 +395,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <button onclick="startCamera()">📷 カメラ起動</button>
     </div>
     <div class="scan-area-compact hidden" id="cameraOn">
-      <div id="qr-reader" style="width:100%;height:200px"></div>
+      <div id="qr-reader" style="width:100%;height:280px"></div>
       <div class="scan-hint" id="scanHint">バーコードを枠内に合わせてください</div>
     </div>
     <!-- カメラ稼働中の補助テキスト -->
@@ -444,13 +451,28 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
-// 画面タッチでカメラが止まっていたら再起動（フォールバック）
+// 画面タッチでカメラが止まっていたら再起動、動いていればフォーカスリセット
 var camEl = document.getElementById('cameraOn');
 if (camEl) {
   camEl.addEventListener('click', function() {
     if (!cameraActive || !html5QrCode) {
       restartCamera();
+      return;
     }
+    // カメラが動いている場合 → フォーカスをリセットして読取精度向上
+    try {
+      var videoElem = document.querySelector('#qr-reader video');
+      if (videoElem && videoElem.srcObject) {
+        var track = videoElem.srcObject.getVideoTracks()[0];
+        if (track && track.applyConstraints) {
+          track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function(){});
+        }
+      }
+      document.getElementById('scanHint').textContent = 'フォーカス調整中...';
+      setTimeout(function() {
+        document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+      }, 1500);
+    } catch(e) {}
   });
 }
 
@@ -555,9 +577,20 @@ function startCamera() {
 
   // 少し待ってからカメラ起動（DOM更新を確実に反映）
   setTimeout(function() {
-    html5QrCode = new Html5Qrcode("qr-reader");
+    html5QrCode = new Html5Qrcode("qr-reader", {
+      experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+      verbose: false
+    });
+
+    // スマホ画面幅に合わせた読取エリア（大きめに設定）
+    var vw = Math.min(window.innerWidth - 40, 400);
+    var vh = Math.round(vw * 0.4);
+
     var config = {
-      fps: 10, qrbox: { width: 250, height: 100 },
+      fps: 5,
+      qrbox: { width: vw, height: vh },
+      aspectRatio: 1.7778,
+      disableFlip: false,
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
@@ -565,8 +598,15 @@ function startCamera() {
         Html5QrcodeSupportedFormats.ITF
       ]
     };
+
+    // 高解像度カメラを要求（フォーカスが合いやすくなる）
+    var cameraConstraints = {
+      facingMode: "environment",
+      advanced: [{ focusMode: "continuous" }]
+    };
+
     html5QrCode.start(
-      { facingMode: "environment" }, config,
+      cameraConstraints, config,
       function(decodedText) { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
       function() {}
     ).then(function() {
@@ -574,16 +614,46 @@ function startCamera() {
       cameraStarting = false;
       document.getElementById('cameraStatus').classList.remove('hidden');
       document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+
+      // カメラ映像トラックから高解像度を要求（可能な場合）
+      try {
+        var videoElem = document.querySelector('#qr-reader video');
+        if (videoElem && videoElem.srcObject) {
+          var track = videoElem.srcObject.getVideoTracks()[0];
+          if (track && track.applyConstraints) {
+            track.applyConstraints({
+              advanced: [
+                { width: { ideal: 1920 }, height: { ideal: 1080 } },
+                { focusMode: "continuous" },
+                { torch: false }
+              ]
+            }).catch(function(){});
+          }
+        }
+      } catch(e){}
     }).catch(function(err) {
       console.error('Camera error:', err);
-      cameraStarting = false;
-      cameraActive = false;
-      document.getElementById('cameraOff').classList.remove('hidden');
-      document.getElementById('cameraOn').classList.add('hidden');
-      document.getElementById('cameraStatus').classList.add('hidden');
-      alert('カメラにアクセスできません。手動入力をご利用ください。');
+      // フォールバック：シンプルな設定で再試行
+      html5QrCode.start(
+        { facingMode: "environment" }, config,
+        function(decodedText) { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
+        function() {}
+      ).then(function() {
+        cameraActive = true;
+        cameraStarting = false;
+        document.getElementById('cameraStatus').classList.remove('hidden');
+        document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+      }).catch(function(err2) {
+        console.error('Camera fallback error:', err2);
+        cameraStarting = false;
+        cameraActive = false;
+        document.getElementById('cameraOff').classList.remove('hidden');
+        document.getElementById('cameraOn').classList.add('hidden');
+        document.getElementById('cameraStatus').classList.add('hidden');
+        alert('カメラにアクセスできません。手動入力をご利用ください。');
+      });
     });
-  }, 100);
+  }, 200);
 }
 
 function _cleanupCamera() {
