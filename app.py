@@ -331,6 +331,34 @@ def _normalize_instore_jan(jan):
     return candidates
 
 
+def _extract_instore_price(jan):
+    """インストア商品バーコードから埋め込み価格を抽出。
+    フォーマット: 02XXXXX PPPPP C (13桁)
+      02     = インストアマーキングフラグ
+      XXXXX  = 商品コード (5桁)
+      PPPPP  = 価格 (5桁、税抜)
+      C      = チェックデジット (1桁)
+    例: 0221425 00099 8 → ¥99
+    """
+    if len(jan) == 13 and jan.startswith('02'):
+        price_str = jan[7:12]  # 5桁の価格部分
+        try:
+            price = int(price_str)
+            if price > 0:
+                return price
+        except ValueError:
+            pass
+    elif len(jan) == 13 and jan.startswith('2'):
+        price_str = jan[7:12]
+        try:
+            price = int(price_str)
+            if price > 0:
+                return price
+        except ValueError:
+            pass
+    return None
+
+
 @app.route('/api/scan/product', methods=['GET'])
 def scan_product():
     """JANコードで商品情報を検索"""
@@ -358,11 +386,23 @@ def scan_product():
     if not product:
         return jsonify({'error': 'not_found', 'jan': jan}), 404
 
-    # 値入率計算
-    if product.get('sell_price') and product['sell_price'] > 0 and product.get('cost') and product['cost'] > 0:
-        product['margin_rate'] = round((1 - product['cost'] / product['sell_price']) * 100, 1)
+    # インストア商品: バーコードから実売価格を抽出
+    instore_price = _extract_instore_price(jan)
+    if instore_price is not None:
+        product['instore_price'] = instore_price
+        product['is_instore'] = True
+        # 値入率をインストア価格で再計算
+        if product.get('cost') and product['cost'] > 0 and instore_price > 0:
+            product['margin_rate'] = round((1 - product['cost'] / instore_price) * 100, 1)
+        else:
+            product['margin_rate'] = 0
     else:
-        product['margin_rate'] = 0
+        product['is_instore'] = False
+        # 通常商品の値入率計算
+        if product.get('sell_price') and product['sell_price'] > 0 and product.get('cost') and product['cost'] > 0:
+            product['margin_rate'] = round((1 - product['cost'] / product['sell_price']) * 100, 1)
+        else:
+            product['margin_rate'] = 0
 
     # スキャンされたJANとDB上のJANが異なる場合（インストア商品正規化時）
     product['scanned_jan'] = jan

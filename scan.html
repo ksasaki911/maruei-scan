@@ -632,16 +632,34 @@ function displayProduct(p) {
   document.getElementById('resJan').textContent = 'JAN: ' + p.jan;
   document.getElementById('resName').textContent = p.product_name || '不明';
   document.getElementById('resSpec').textContent = p.spec || '';
-  const tp = p.tax_price || p.sell_price || 0;
-  document.getElementById('resTaxPrice').textContent = tp > 0 ? '¥' + tp.toLocaleString() : '-';
-  document.getElementById('resCost').textContent = p.cost > 0 ? '¥' + Math.round(p.cost).toLocaleString() : '-';
-  document.getElementById('resMargin').textContent = p.margin_rate > 0 ? p.margin_rate + '%' : '-';
-  const details = [
+
+  // インストア商品: バーコードから抽出した実売価格を表示
+  var displayPrice, displayCost, displayMargin;
+  if (p.is_instore && p.instore_price) {
+    displayPrice = '¥' + p.instore_price.toLocaleString();
+    displayCost = p.cost > 0 ? '¥' + Math.round(p.cost).toLocaleString() : '-';
+    displayMargin = p.margin_rate > 0 ? p.margin_rate + '%' : '-';
+  } else {
+    var tp = p.tax_price || p.sell_price || 0;
+    displayPrice = tp > 0 ? '¥' + tp.toLocaleString() : '-';
+    displayCost = p.cost > 0 ? '¥' + Math.round(p.cost).toLocaleString() : '-';
+    displayMargin = p.margin_rate > 0 ? p.margin_rate + '%' : '-';
+  }
+  document.getElementById('resTaxPrice').textContent = displayPrice;
+  document.getElementById('resCost').textContent = displayCost;
+  document.getElementById('resMargin').textContent = displayMargin;
+
+  var details = [
     ['EDP', p.edp || '-'],
-    ['本体売価', p.sell_price > 0 ? '¥' + p.sell_price.toLocaleString() : '-'],
-    ['分類', p.dept_code || '-'],
-    ['仕入先', p.supplier_code || '-'],
   ];
+  if (p.is_instore && p.instore_price) {
+    details.push(['バーコード価格', '¥' + p.instore_price.toLocaleString() + '（税抜）']);
+  } else {
+    details.push(['本体売価', p.sell_price > 0 ? '¥' + p.sell_price.toLocaleString() : '-']);
+  }
+  details.push(['分類', p.dept_code || '-']);
+  details.push(['仕入先', p.supplier_code || '-']);
+
   document.getElementById('detailRows').innerHTML = details.map(d =>
     '<div class="detail-row"><span class="dl">' + d[0] + '</span><span class="dv">' + d[1] + '</span></div>'
   ).join('');
