@@ -333,6 +333,29 @@ let cameraActive = false;
 let html5QrCode = null;
 let searchMode = 'jan'; // 'jan' or 'name'
 
+// ===== ページ復帰時のカメラ再起動 =====
+// ブラウザがバックグラウンドから戻った時にカメラを再起動
+document.addEventListener('visibilitychange', function() {
+  if (!document.hidden) {
+    // ページが再表示された
+    var scanSection = document.getElementById('scanSection');
+    if (scanSection && !scanSection.classList.contains('hidden')) {
+      // スキャンタブが表示中なら、カメラ状態をチェックして必要なら再起動
+      setTimeout(function() { restartCamera(); }, 500);
+    }
+  }
+});
+
+// 画面タッチでカメラが止まっていたら再起動（フォールバック）
+var camEl = document.getElementById('cameraOn');
+if (camEl) {
+  camEl.addEventListener('click', function() {
+    if (!cameraActive || !html5QrCode) {
+      restartCamera();
+    }
+  });
+}
+
 // ===== スキャン成功音 =====
 function playBeep() {
   try {
@@ -371,7 +394,15 @@ function showTab(tab) {
   document.getElementById('tab' + tab.charAt(0).toUpperCase() + tab.slice(1)).classList.add('active');
   document.getElementById('scanSection').classList.toggle('hidden', tab !== 'scan');
   document.getElementById('statsSection').classList.toggle('hidden', tab !== 'stats');
-  if (tab === 'stats') { loadStats(); loadSyncSchedule(); }
+  if (tab === 'stats') {
+    loadStats(); loadSyncSchedule();
+    // データタブに切り替え時、カメラを停止（リソース解放）
+    stopCamera();
+  }
+  if (tab === 'scan') {
+    // スキャンタブに戻った時、カメラを自動再起動
+    setTimeout(function() { restartCamera(); }, 300);
+  }
 }
 
 // ===== データタブ切替 =====
@@ -408,45 +439,88 @@ function onStoreChange() {
 }
 
 // ===== カメラ起動 =====
+var cameraStarting = false;  // 二重起動防止
+
 function startCamera() {
+  if (cameraStarting) return;
+  cameraStarting = true;
+
   document.getElementById('cameraOff').classList.add('hidden');
   document.getElementById('cameraOn').classList.remove('hidden');
 
   // 既存インスタンスを確実にクリーンアップ
-  if (html5QrCode) {
-    try { html5QrCode.stop().catch(()=>{}); } catch(e) {}
-    try { html5QrCode.clear(); } catch(e) {}
-    html5QrCode = null;
-  }
+  _cleanupCamera();
+
   // DOMもリセット（html5-qrcodeがvideoタグを残すことがある）
   var reader = document.getElementById('qr-reader');
   if (reader) reader.innerHTML = '';
 
-  html5QrCode = new Html5Qrcode("qr-reader");
-  cameraActive = true;
-  const config = {
-    fps: 10, qrbox: { width: 250, height: 100 },
-    formatsToSupport: [
-      Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
-      Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
-      Html5QrcodeSupportedFormats.ITF
-    ]
-  };
-  html5QrCode.start(
-    { facingMode: "environment" }, config,
-    (decodedText) => { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
-    () => {}
-  ).then(() => {
-    document.getElementById('cameraStatus').classList.remove('hidden');
-  }).catch(err => {
-    console.error('Camera error:', err);
-    document.getElementById('cameraOff').classList.remove('hidden');
-    document.getElementById('cameraOn').classList.add('hidden');
-    cameraActive = false;
-    document.getElementById('cameraStatus').classList.add('hidden');
-    alert('カメラにアクセスできません。手動入力をご利用ください。');
-  });
+  // 少し待ってからカメラ起動（DOM更新を確実に反映）
+  setTimeout(function() {
+    html5QrCode = new Html5Qrcode("qr-reader");
+    var config = {
+      fps: 10, qrbox: { width: 250, height: 100 },
+      formatsToSupport: [
+        Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
+        Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
+        Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+        Html5QrcodeSupportedFormats.ITF
+      ]
+    };
+    html5QrCode.start(
+      { facingMode: "environment" }, config,
+      function(decodedText) { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
+      function() {}
+    ).then(function() {
+      cameraActive = true;
+      cameraStarting = false;
+      document.getElementById('cameraStatus').classList.remove('hidden');
+      document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+    }).catch(function(err) {
+      console.error('Camera error:', err);
+      cameraStarting = false;
+      cameraActive = false;
+      document.getElementById('cameraOff').classList.remove('hidden');
+      document.getElementById('cameraOn').classList.add('hidden');
+      document.getElementById('cameraStatus').classList.add('hidden');
+      alert('カメラにアクセスできません。手動入力をご利用ください。');
+    });
+  }, 100);
+}
+
+function _cleanupCamera() {
+  if (html5QrCode) {
+    try {
+      var state = html5QrCode.getState();
+      if (state === Html5QrcodeScannerState.SCANNING || state === Html5QrcodeScannerState.PAUSED) {
+        html5QrCode.stop().then(function() {
+          try { html5QrCode.clear(); } catch(e) {}
+        }).catch(function() {});
+      } else {
+        try { html5QrCode.clear(); } catch(e) {}
+      }
+    } catch(e) {
+      try { html5QrCode.stop().catch(function(){}); } catch(e2) {}
+    }
+    html5QrCode = null;
+  }
+  cameraActive = false;
+}
+
+function restartCamera() {
+  // スキャンタブに戻った時等の再起動用
+  // カメラが既に正常稼働中ならスキップ
+  if (cameraActive && html5QrCode) {
+    try {
+      var state = html5QrCode.getState();
+      if (state === Html5QrcodeScannerState.SCANNING) return;  // 正常動作中
+    } catch(e) {}
+  }
+  // カメラが停止しているか異常 → 再起動
+  _cleanupCamera();
+  var reader = document.getElementById('qr-reader');
+  if (reader) reader.innerHTML = '';
+  startCamera();
 }
 
 let lastScannedCode = '';
@@ -483,34 +557,37 @@ function onBarcodeDetected(code) {
 }
 
 function scrollToCamera() {
-  const cam = document.getElementById('cameraOn');
   lastScannedCode = '';  // リセットして即スキャン可能に
-  document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
   document.getElementById('scanNextBtn').classList.add('hidden');
 
-  if (cam && !cam.classList.contains('hidden') && cameraActive) {
-    // カメラは表示中＆稼働中 → スクロールのみ
-    cam.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  // カメラが正常スキャン中かチェック
+  var isScanning = false;
+  if (cameraActive && html5QrCode) {
+    try {
+      var state = html5QrCode.getState();
+      isScanning = (state === Html5QrcodeScannerState.SCANNING);
+    } catch(e) {}
+  }
+
+  if (isScanning) {
+    // 正常動作中 → スクロールのみ
+    var cam = document.getElementById('cameraOn');
+    if (cam) cam.scrollIntoView({ behavior: 'smooth', block: 'center' });
   } else {
-    // カメラが停止しているか非表示 → 再起動
-    if (html5QrCode) {
-      try { html5QrCode.stop().catch(()=>{}); } catch(e) {}
-      html5QrCode = null;
-    }
-    cameraActive = false;
-    startCamera();
-    setTimeout(() => {
-      const c = document.getElementById('cameraOn');
+    // カメラが停止状態 → 完全再起動
+    restartCamera();
+    setTimeout(function() {
+      var c = document.getElementById('cameraOn');
       if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }, 500);
+    }, 600);
   }
 }
 
 function stopCamera() {
-  cameraActive = false;
-  if (html5QrCode) {
-    html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-  }
+  _cleanupCamera();
+  document.getElementById('cameraStatus').classList.add('hidden');
+  document.getElementById('cameraOff').classList.remove('hidden');
+  document.getElementById('cameraOn').classList.add('hidden');
 }
 
 // ===== 検索モード =====
