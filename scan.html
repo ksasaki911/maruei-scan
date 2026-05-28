@@ -146,6 +146,104 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
 .search-count{padding:4px 12px;font-size:11px;color:var(--txt2)}
 
 .hidden{display:none!important}
+
+/* ========== スマホ用レスポンシブ (max-width: 768px) ========== */
+@media (max-width: 768px) {
+  body{font-size:16px}
+
+  /* ヘッダー */
+  .header{padding:12px 16px}
+  .header h1{font-size:18px}
+  .header .store-sel{font-size:15px;padding:6px 10px}
+
+  /* 手動入力 */
+  .manual-input{padding:10px 12px;gap:10px}
+  .manual-input input{font-size:18px;padding:12px 14px}
+  .manual-input button{font-size:16px;padding:12px 18px}
+
+  /* 検索モード切替 */
+  .search-mode-tab{font-size:15px;padding:12px}
+
+  /* 商品カード */
+  .product-header{padding:14px 16px}
+  .product-header .jan{font-size:13px}
+  .product-header .name{font-size:20px}
+  .product-header .spec{font-size:14px}
+  .info-cell{padding:14px 6px}
+  .info-cell .label{font-size:12px}
+  .info-cell .value{font-size:22px}
+  .detail-rows{padding:0 16px}
+  .detail-row{font-size:15px;padding:10px 0}
+
+  /* データタブ */
+  .data-tabs{margin:10px 8px}
+  .data-tab{font-size:14px;padding:12px 4px}
+
+  /* セクション */
+  .section-title{font-size:15px;padding:12px 14px}
+  .wk-col .wh{font-size:12px}
+  .wk-col .wv{font-size:18px}
+  .wk-col .wa{font-size:13px}
+
+  /* テーブル */
+  .data-table{font-size:14px}
+  .data-table th{font-size:12px;padding:10px 4px}
+  .data-table td{padding:8px 4px;font-size:14px}
+  .data-table td:first-child{font-size:13px}
+
+  /* 在庫グリッド */
+  .zaiko-cell{padding:12px}
+  .zaiko-cell .zl{font-size:12px}
+  .zaiko-cell .zv{font-size:22px}
+
+  /* 店舗タブ */
+  .store-tab{font-size:13px;padding:8px 14px}
+
+  /* 統計 */
+  .stat-card{padding:16px}
+  .stat-card .sv{font-size:26px}
+  .stat-card .sl{font-size:13px}
+
+  /* 下部ナビ */
+  .bottom-nav .nav-btn{font-size:12px;padding:6px}
+  .bottom-nav .nav-btn .icon{font-size:24px}
+  .content{padding-bottom:70px}
+
+  /* 次をスキャン */
+  .scan-next-btn{font-size:16px;padding:14px 28px;bottom:76px}
+
+  /* 検索結果 */
+  .search-result-item{padding:12px 16px}
+  .search-result-item .sr-name{font-size:16px}
+  .search-result-item .sr-sub{font-size:13px}
+  .search-result-item .sr-prices{font-size:15px}
+  .search-count{font-size:13px}
+
+  /* 未発見 */
+  .not-found .nf-text{font-size:18px}
+  .not-found .nf-sub{font-size:14px}
+
+  /* 初期表示 */
+  .scan-prompt .sp-text{font-size:15px}
+
+  /* カメラOFF */
+  .camera-off button{font-size:18px;padding:16px 36px}
+
+  /* カメラヒント */
+  .scan-hint{font-size:14px}
+
+  /* カメラステータス */
+  #cameraStatus{font-size:13px;padding:8px}
+}
+
+/* ========== PC用 (min-width: 769px) ========== */
+@media (min-width: 769px) {
+  .content{max-width:600px;margin:0 auto}
+  .bottom-nav{display:none}
+  .content{padding-bottom:16px}
+  .header{max-width:600px;margin:0 auto;border-radius:0 0 12px 12px}
+  .scan-next-btn{bottom:16px}
+}
 </style>
 </head>
 <body>

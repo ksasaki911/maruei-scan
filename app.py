@@ -390,6 +390,20 @@ def scan_product():
     if not product:
         return jsonify({'error': 'not_found', 'jan': jan}), 404
 
+    # 実績チェック: POS・在庫・棚割りのいずれかにデータがあるか
+    matched_jan = product['jan']
+    has_data = query_one("""
+        SELECT
+          (SELECT COUNT(*) FROM t_scan_pos_daily WHERE jan = %s) +
+          (SELECT COUNT(*) FROM t_scan_zaiko WHERE jan = %s) +
+          (SELECT COUNT(*) FROM t_scan_tanawari WHERE jan = %s) +
+          (SELECT COUNT(*) FROM t_scan_ukebarai WHERE jan = %s)
+        AS total
+    """, [matched_jan, matched_jan, matched_jan, matched_jan])
+    if has_data and has_data['total'] == 0:
+        return jsonify({'error': 'not_found', 'jan': jan,
+                        'reason': 'マスタ登録のみ（販売・在庫・棚割り実績なし）'}), 404
+
     # インストア商品: バーコードから実売価格を抽出
     instore_price = _extract_instore_price(jan)
     if instore_price is not None:
@@ -428,17 +442,24 @@ def scan_search():
     params = []
     for term in terms[:5]:  # 最大5語
         conditions.append(
-            "(product_name ILIKE %s OR product_name_kana ILIKE %s OR supplier_code ILIKE %s OR edp ILIKE %s OR jan ILIKE %s)"
+            "(p.product_name ILIKE %s OR p.product_name_kana ILIKE %s OR p.supplier_code ILIKE %s OR p.edp ILIKE %s OR p.jan ILIKE %s)"
         )
         like = f"%{term}%"
         params.extend([like, like, like, like, like])
 
     where = " AND ".join(conditions)
-    sql = f"""SELECT jan, edp, product_name, product_name_kana, spec,
-              dept_code, supplier_code, cost, sell_price, tax_price
-              FROM t_scan_products
+    # 実績あり商品のみ（POS・在庫・棚割り・受払いのいずれかにデータあり）
+    sql = f"""SELECT p.jan, p.edp, p.product_name, p.product_name_kana, p.spec,
+              p.dept_code, p.supplier_code, p.cost, p.sell_price, p.tax_price
+              FROM t_scan_products p
               WHERE {where}
-              ORDER BY product_name
+              AND (
+                EXISTS (SELECT 1 FROM t_scan_pos_daily d WHERE d.jan = p.jan) OR
+                EXISTS (SELECT 1 FROM t_scan_zaiko z WHERE z.jan = p.jan) OR
+                EXISTS (SELECT 1 FROM t_scan_tanawari t WHERE t.jan = p.jan) OR
+                EXISTS (SELECT 1 FROM t_scan_ukebarai u WHERE u.jan = p.jan)
+              )
+              ORDER BY p.product_name
               LIMIT 50"""
 
     rows = query_rows(sql, params)
