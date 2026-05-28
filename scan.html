@@ -459,20 +459,12 @@ if (camEl) {
       restartCamera();
       return;
     }
-    // カメラが動いている場合 → フォーカスをリセットして読取精度向上
-    try {
-      var videoElem = document.querySelector('#qr-reader video');
-      if (videoElem && videoElem.srcObject) {
-        var track = videoElem.srcObject.getVideoTracks()[0];
-        if (track && track.applyConstraints) {
-          track.applyConstraints({ advanced: [{ focusMode: "continuous" }] }).catch(function(){});
-        }
-      }
-      document.getElementById('scanHint').textContent = 'フォーカス調整中...';
-      setTimeout(function() {
-        document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
-      }, 1500);
-    } catch(e) {}
+    // カメラが動いている場合 → フォーカスリセットで読取改善
+    _applyVideoEnhancements();
+    document.getElementById('scanHint').textContent = 'フォーカス調整中...';
+    setTimeout(function() {
+      document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+    }, 1500);
   });
 }
 
@@ -582,15 +574,18 @@ function startCamera() {
       verbose: false
     });
 
-    // スマホ画面幅に合わせた読取エリア（大きめに設定）
-    var vw = Math.min(window.innerWidth - 40, 400);
-    var vh = Math.round(vw * 0.4);
+    // qrboxをビデオ実サイズに合わせて動的計算（これが最重要！）
+    function dynamicQrBox(viewfinderWidth, viewfinderHeight) {
+      // ビデオ表示領域の80%幅、40%高さをスキャン領域に
+      var w = Math.floor(viewfinderWidth * 0.85);
+      var h = Math.floor(viewfinderHeight * 0.5);
+      return { width: w, height: h };
+    }
 
     var config = {
-      fps: 5,
-      qrbox: { width: vw, height: vh },
-      aspectRatio: 1.7778,
-      disableFlip: false,
+      fps: 10,
+      qrbox: dynamicQrBox,
+      disableFlip: true,
       formatsToSupport: [
         Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
         Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
@@ -599,61 +594,66 @@ function startCamera() {
       ]
     };
 
-    // 高解像度カメラを要求（フォーカスが合いやすくなる）
-    var cameraConstraints = {
-      facingMode: "environment",
-      advanced: [{ focusMode: "continuous" }]
+    var onSuccess = function(decodedText) {
+      if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText);
     };
+    var onFailure = function() {};
 
-    html5QrCode.start(
-      cameraConstraints, config,
-      function(decodedText) { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
-      function() {}
-    ).then(function() {
+    function onCameraStarted() {
       cameraActive = true;
       cameraStarting = false;
       document.getElementById('cameraStatus').classList.remove('hidden');
       document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
+      // 高解像度＋連続フォーカスを要求
+      _applyVideoEnhancements();
+    }
 
-      // カメラ映像トラックから高解像度を要求（可能な場合）
-      try {
-        var videoElem = document.querySelector('#qr-reader video');
-        if (videoElem && videoElem.srcObject) {
-          var track = videoElem.srcObject.getVideoTracks()[0];
-          if (track && track.applyConstraints) {
-            track.applyConstraints({
-              advanced: [
-                { width: { ideal: 1920 }, height: { ideal: 1080 } },
-                { focusMode: "continuous" },
-                { torch: false }
-              ]
-            }).catch(function(){});
-          }
-        }
-      } catch(e){}
-    }).catch(function(err) {
-      console.error('Camera error:', err);
-      // フォールバック：シンプルな設定で再試行
+    // まず高解像度＋連続フォーカスで起動試行
+    html5QrCode.start(
+      { facingMode: { exact: "environment" } }, config, onSuccess, onFailure
+    ).then(onCameraStarted).catch(function(err) {
+      console.warn('Camera exact env failed, trying simple:', err);
+      // フォールバック1: facingMode exactなし
       html5QrCode.start(
-        { facingMode: "environment" }, config,
-        function(decodedText) { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
-        function() {}
-      ).then(function() {
-        cameraActive = true;
-        cameraStarting = false;
-        document.getElementById('cameraStatus').classList.remove('hidden');
-        document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
-      }).catch(function(err2) {
-        console.error('Camera fallback error:', err2);
-        cameraStarting = false;
-        cameraActive = false;
-        document.getElementById('cameraOff').classList.remove('hidden');
-        document.getElementById('cameraOn').classList.add('hidden');
-        document.getElementById('cameraStatus').classList.add('hidden');
-        alert('カメラにアクセスできません。手動入力をご利用ください。');
+        { facingMode: "environment" }, config, onSuccess, onFailure
+      ).then(onCameraStarted).catch(function(err2) {
+        console.warn('Camera env failed, trying any:', err2);
+        // フォールバック2: 何でもいいからカメラ起動
+        html5QrCode.start(true, config, onSuccess, onFailure
+        ).then(onCameraStarted).catch(function(err3) {
+          console.error('All camera attempts failed:', err3);
+          cameraStarting = false;
+          cameraActive = false;
+          document.getElementById('cameraOff').classList.remove('hidden');
+          document.getElementById('cameraOn').classList.add('hidden');
+          document.getElementById('cameraStatus').classList.add('hidden');
+          alert('カメラにアクセスできません。手動入力をご利用ください。');
+        });
       });
     });
   }, 200);
+}
+
+// カメラ映像の品質向上（起動後に適用）
+function _applyVideoEnhancements() {
+  try {
+    var videoElem = document.querySelector('#qr-reader video');
+    if (!videoElem || !videoElem.srcObject) return;
+    var track = videoElem.srcObject.getVideoTracks()[0];
+    if (!track) return;
+    var capabilities = track.getCapabilities ? track.getCapabilities() : {};
+    var constraints = {};
+    // 高解像度
+    if (capabilities.width) constraints.width = { ideal: 1920 };
+    if (capabilities.height) constraints.height = { ideal: 1080 };
+    // 連続オートフォーカス
+    if (capabilities.focusMode && capabilities.focusMode.indexOf('continuous') >= 0) {
+      constraints.focusMode = 'continuous';
+    }
+    if (Object.keys(constraints).length > 0) {
+      track.applyConstraints(constraints).catch(function(){});
+    }
+  } catch(e) {}
 }
 
 function _cleanupCamera() {
