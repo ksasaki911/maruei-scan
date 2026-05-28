@@ -452,7 +452,17 @@ function startCamera() {
 let lastScannedCode = '';
 let lastScannedTime = 0;
 
+function normalizeBarcode(code) {
+  // UPC-A(12桁)で読まれた場合、先頭に0を付けてEAN-13に変換
+  // 例: 221425000998 → 0221425000998
+  if (code.length === 12 && /^\d+$/.test(code)) {
+    code = '0' + code;
+  }
+  return code;
+}
+
 function onBarcodeDetected(code) {
+  code = normalizeBarcode(code);
   const now = Date.now();
   // 同じコードは3秒間無視、違うコードは即座に反応
   if (code === lastScannedCode && now - lastScannedTime < 3000) return;
@@ -471,8 +481,6 @@ function onBarcodeDetected(code) {
   // 3秒後に同じコードを再スキャン可能にする
   setTimeout(() => { if (lastScannedCode === code) lastScannedCode = ''; }, 3000);
 }
-
-// インストア商品(02始まり)のJAN正規化は不要 — サーバー側で複数パターン検索
 
 function scrollToCamera() {
   const cam = document.getElementById('cameraOn');
@@ -591,8 +599,10 @@ function selectSearchResult(jan) {
 
 // ===== 商品検索（JAN） =====
 function searchProduct() {
-  const jan = document.getElementById('janInput').value.trim();
+  var jan = document.getElementById('janInput').value.trim();
   if (!jan) return;
+  jan = normalizeBarcode(jan);
+  document.getElementById('janInput').value = jan;
   document.getElementById('resultSection').classList.add('hidden');
   document.getElementById('notFoundSection').classList.add('hidden');
   document.getElementById('scanPrompt').classList.add('hidden');

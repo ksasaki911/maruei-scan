@@ -126,12 +126,16 @@ def ensure_tables():
         PRIMARY KEY (date, store_code, jan)
     )""")
     # 外部仕入カラム追加（既存テーブル対応）
+    # PostgreSQLではALTER TABLE失敗でトランザクションがabortするため、
+    # SAVEPOINTで囲んでロールバック可能にする
     for col in ['ext_purchase_cost','ext_purchase_sell','ext_purchase_qty',
                 'ext_return_cost','ext_return_sell','ext_return_qty']:
         try:
+            cur.execute("SAVEPOINT sp_alter")
             cur.execute(f"ALTER TABLE t_scan_ukebarai ADD COLUMN {col} REAL DEFAULT 0")
+            cur.execute("RELEASE SAVEPOINT sp_alter")
         except Exception:
-            pass  # 既に存在する場合
+            cur.execute("ROLLBACK TO SAVEPOINT sp_alter")
 
     # 在庫
     cur.execute("""CREATE TABLE IF NOT EXISTS t_scan_zaiko (
