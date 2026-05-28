@@ -309,6 +309,28 @@ def service_worker():
 
 # ========== 商品照会API ==========
 
+def _normalize_instore_jan(jan):
+    """インストア商品(02始まり)のJAN正規化。
+    バーコード: 02XXXXX PPPPP C (13桁) → 価格部分をゼロ埋め
+    CHAINSでは 02XXXXX000000 で商品マスタに登録されている場合が多い。
+    複数パターンで検索を試みる。"""
+    candidates = [jan]  # 元のコードはそのまま先頭
+    if len(jan) == 13 and jan.startswith('02'):
+        # パターン1: 価格5桁をゼロ埋め（02XXXXX00000C → 02XXXXX000000）
+        base7 = jan[:7]  # '02XXXXX'
+        candidates.append(base7 + '000000')
+        # パターン2: 末尾チェックデジットも含めてゼロ（13桁）
+        candidates.append(base7 + '0000000')  # 14桁なので除外
+        # パターン3: LIKE検索用（02XXXXX%）
+        candidates.append(base7)
+    elif len(jan) == 13 and jan.startswith('2'):
+        # NONPLUフォーマット: 2XXXXXX PPPPP C
+        base7 = jan[:7]
+        candidates.append(base7 + '000000')
+        candidates.append(base7)
+    return candidates
+
+
 @app.route('/api/scan/product', methods=['GET'])
 def scan_product():
     """JANコードで商品情報を検索"""
@@ -316,7 +338,23 @@ def scan_product():
     if not jan:
         return jsonify({'error': 'jan parameter required'}), 400
 
+    # まず完全一致
     product = query_one("SELECT * FROM t_scan_products WHERE jan = %s", [jan])
+
+    # インストア商品(02/2始まり)の場合、正規化パターンで検索
+    if not product and len(jan) >= 13 and (jan.startswith('02') or jan.startswith('2')):
+        candidates = _normalize_instore_jan(jan)
+        for cand in candidates[1:]:  # 元コードは既に試した
+            product = query_one("SELECT * FROM t_scan_products WHERE jan = %s", [cand])
+            if product:
+                break
+        # それでも見つからなければ前方一致
+        if not product:
+            prefix = jan[:7] if jan.startswith('02') else jan[:7]
+            product = query_one(
+                "SELECT * FROM t_scan_products WHERE jan LIKE %s LIMIT 1",
+                [prefix + '%'])
+
     if not product:
         return jsonify({'error': 'not_found', 'jan': jan}), 404
 
@@ -325,6 +363,10 @@ def scan_product():
         product['margin_rate'] = round((1 - product['cost'] / product['sell_price']) * 100, 1)
     else:
         product['margin_rate'] = 0
+
+    # スキャンされたJANとDB上のJANが異なる場合（インストア商品正規化時）
+    product['scanned_jan'] = jan
+    product['matched_jan'] = product['jan']
 
     return jsonify(product)
 

@@ -411,7 +411,17 @@ function onStoreChange() {
 function startCamera() {
   document.getElementById('cameraOff').classList.add('hidden');
   document.getElementById('cameraOn').classList.remove('hidden');
-  if (html5QrCode) { try { html5QrCode.stop().catch(()=>{}); } catch(e) {} }
+
+  // 既存インスタンスを確実にクリーンアップ
+  if (html5QrCode) {
+    try { html5QrCode.stop().catch(()=>{}); } catch(e) {}
+    try { html5QrCode.clear(); } catch(e) {}
+    html5QrCode = null;
+  }
+  // DOMもリセット（html5-qrcodeがvideoタグを残すことがある）
+  var reader = document.getElementById('qr-reader');
+  if (reader) reader.innerHTML = '';
+
   html5QrCode = new Html5Qrcode("qr-reader");
   cameraActive = true;
   const config = {
@@ -419,12 +429,13 @@ function startCamera() {
     formatsToSupport: [
       Html5QrcodeSupportedFormats.EAN_13, Html5QrcodeSupportedFormats.EAN_8,
       Html5QrcodeSupportedFormats.UPC_A, Html5QrcodeSupportedFormats.UPC_E,
-      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39
+      Html5QrcodeSupportedFormats.CODE_128, Html5QrcodeSupportedFormats.CODE_39,
+      Html5QrcodeSupportedFormats.ITF
     ]
   };
   html5QrCode.start(
     { facingMode: "environment" }, config,
-    (decodedText) => { if (decodedText && decodedText.length >= 8) onBarcodeDetected(decodedText); },
+    (decodedText) => { if (decodedText && decodedText.length >= 4) onBarcodeDetected(decodedText); },
     () => {}
   ).then(() => {
     document.getElementById('cameraStatus').classList.remove('hidden');
@@ -461,17 +472,30 @@ function onBarcodeDetected(code) {
   setTimeout(() => { if (lastScannedCode === code) lastScannedCode = ''; }, 3000);
 }
 
+// インストア商品(02始まり)のJAN正規化は不要 — サーバー側で複数パターン検索
+
 function scrollToCamera() {
   const cam = document.getElementById('cameraOn');
-  if (cam && !cam.classList.contains('hidden')) {
-    cam.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // スキャナーが停止していたら再起動
-    document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
-    lastScannedCode = '';  // リセットして即スキャン可能に
-  } else {
-    startCamera();
-  }
+  lastScannedCode = '';  // リセットして即スキャン可能に
+  document.getElementById('scanHint').textContent = 'バーコードを枠内に合わせてください';
   document.getElementById('scanNextBtn').classList.add('hidden');
+
+  if (cam && !cam.classList.contains('hidden') && cameraActive) {
+    // カメラは表示中＆稼働中 → スクロールのみ
+    cam.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else {
+    // カメラが停止しているか非表示 → 再起動
+    if (html5QrCode) {
+      try { html5QrCode.stop().catch(()=>{}); } catch(e) {}
+      html5QrCode = null;
+    }
+    cameraActive = false;
+    startCamera();
+    setTimeout(() => {
+      const c = document.getElementById('cameraOn');
+      if (c) c.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 500);
+  }
 }
 
 function stopCamera() {
@@ -586,9 +610,10 @@ function searchProduct() {
     })
     .then(data => {
       if (!data || data.error) return;
-      currentJan = jan;
+      // インストア商品の場合、DB上のJANを使う（POS・受払い等の検索用）
+      currentJan = data.matched_jan || data.jan || jan;
       displayProduct(data);
-      loadHistory(jan);
+      loadHistory(currentJan);
       switchDataTabDirect('pos');
       // 商品情報が見えるようにスクロール
       window.scrollTo({ top: 0, behavior: 'smooth' });
