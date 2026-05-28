@@ -195,6 +195,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
         <button class="data-tab active" onclick="switchDataTab('pos')">POS販売</button>
         <button class="data-tab" onclick="switchDataTab('ukebarai')">受払い</button>
         <button class="data-tab" onclick="switchDataTab('zaiko')">在庫</button>
+        <button class="data-tab" onclick="switchDataTab('tanawari')">棚割り</button>
       </div>
 
       <!-- POS販売タブ -->
@@ -240,6 +241,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
               <tr><th>店舗</th><th>前日在</th><th>仕入</th><th>POS</th><th>理論在</th><th>当日在</th></tr>
             </thead><tbody id="zaikoBody"></tbody></table>
           </div>
+        </div>
+      </div>
+
+      <!-- 棚割りタブ -->
+      <div id="tanawariPanel" class="hidden">
+        <div class="section-card">
+          <div class="section-title">🗂 棚割り情報</div>
+          <div id="tanawariContent"></div>
         </div>
       </div>
     </div>
@@ -372,18 +381,22 @@ function switchDataTab(tab) {
   document.getElementById('posPanel').classList.toggle('hidden', tab !== 'pos');
   document.getElementById('ukebaraiPanel').classList.toggle('hidden', tab !== 'ukebarai');
   document.getElementById('zaikoPanel').classList.toggle('hidden', tab !== 'zaiko');
+  document.getElementById('tanawariPanel').classList.toggle('hidden', tab !== 'tanawari');
   if (tab === 'ukebarai' && currentJan) loadUkebarai(currentJan);
   if (tab === 'zaiko' && currentJan) loadZaiko(currentJan);
+  if (tab === 'tanawari' && currentJan) loadTanawari(currentJan);
 }
 
 function switchDataTabDirect(tab) {
   document.querySelectorAll('.data-tab').forEach(b => b.classList.remove('active'));
+  var labels = {pos:'POS', ukebarai:'受払', zaiko:'在庫', tanawari:'棚割'};
   document.querySelectorAll('.data-tab').forEach(b => {
-    if(b.textContent.includes(tab==='pos'?'POS':tab==='ukebarai'?'受払':'在庫')) b.classList.add('active');
+    if(b.textContent.includes(labels[tab]||'')) b.classList.add('active');
   });
   document.getElementById('posPanel').classList.toggle('hidden', tab !== 'pos');
   document.getElementById('ukebaraiPanel').classList.toggle('hidden', tab !== 'ukebarai');
   document.getElementById('zaikoPanel').classList.toggle('hidden', tab !== 'zaiko');
+  document.getElementById('tanawariPanel').classList.toggle('hidden', tab !== 'tanawari');
 }
 
 function onStoreChange() {
@@ -740,6 +753,57 @@ function displayZaiko(data) {
       '<td'+cellClass(r.theory_stock)+'>'+(r.theory_stock||0)+'</td>' +
       '<td'+cellClass(r.current_stock)+'>'+(r.current_stock||0)+'</td></tr>';
   }).join('');
+}
+
+// ===== 棚割り =====
+function loadTanawari(jan) {
+  fetch(API + '/api/scan/tanawari?jan=' + encodeURIComponent(jan))
+    .then(r => r.json()).then(data => { renderTanawari(data); })
+    .catch(e => {
+      document.getElementById('tanawariContent').innerHTML =
+        '<div style="text-align:center;color:var(--txt2);padding:20px">棚割りデータ取得エラー</div>';
+    });
+}
+
+function renderTanawari(data) {
+  const ct = document.getElementById('tanawariContent');
+  const rows = data.data || [];
+  if (!rows.length) {
+    ct.innerHTML = '<div style="text-align:center;color:var(--txt2);padding:20px">棚割りデータなし</div>';
+    return;
+  }
+  // 店舗ごとにグループ化
+  var byStore = {};
+  rows.forEach(function(r) {
+    var key = r.store_code;
+    if (!byStore[key]) byStore[key] = { name: r.store_name, rows: [] };
+    byStore[key].rows.push(r);
+  });
+
+  var html = '';
+  Object.keys(byStore).sort().forEach(function(sc) {
+    var g = byStore[sc];
+    html += '<div style="margin-bottom:12px">';
+    html += '<div style="font-weight:700;font-size:13px;padding:6px 0;border-bottom:2px solid var(--primary);margin-bottom:4px">🏪 ' + g.name + '</div>';
+    html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
+    html += '<tr><th>ゴンドラ</th><th>棚段</th><th>位置</th><th>フェイス</th><th>仕入先</th><th>原価</th><th>売価</th><th>値入率</th></tr>';
+    html += '</thead><tbody>';
+    g.rows.forEach(function(r) {
+      var mr = r.margin_rate ? (r.margin_rate * 100).toFixed(1) + '%' : '-';
+      if (typeof r.margin_rate === 'number' && r.margin_rate > 1) mr = r.margin_rate.toFixed(1) + '%';
+      html += '<tr>' +
+        '<td>' + (r.gondola_no || '-') + '</td>' +
+        '<td>' + (r.shelf_no || '-') + '</td>' +
+        '<td>' + (r.position || '-') + '</td>' +
+        '<td style="text-align:center;font-weight:700">' + (r.face_count || 0) + '</td>' +
+        '<td style="font-size:11px">' + (r.supplier_name || '-') + '</td>' +
+        '<td>¥' + (r.cost || 0).toLocaleString() + '</td>' +
+        '<td>¥' + (r.sell_price || 0).toLocaleString() + '</td>' +
+        '<td>' + mr + '</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+  });
+  ct.innerHTML = html;
 }
 
 // ===== 統計 =====

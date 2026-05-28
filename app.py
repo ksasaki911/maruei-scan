@@ -532,6 +532,28 @@ def debug_ukebarai():
     })
 
 
+# ========== 棚割りAPI ==========
+
+@app.route('/api/scan/tanawari', methods=['GET'])
+def scan_tanawari():
+    """JANコードの棚割りデータ（全店舗）"""
+    jan = request.args.get('jan', '').strip()
+
+    if not jan:
+        return jsonify({'error': 'jan parameter required'}), 400
+
+    rows = query_rows("""SELECT store_code, gondola_no, shelf_no, position,
+               product_name, face_count, edp, dept_name, sub_dept_name,
+               supplier_code, supplier_name, cost, sell_price, margin_rate
+               FROM t_scan_tanawari WHERE jan = %s
+               ORDER BY store_code, gondola_no, shelf_no, position""", [jan])
+
+    for r in rows:
+        r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
+
+    return jsonify({'jan': jan, 'data': rows, 'store_names': STORE_NAMES})
+
+
 # ========== 統計API ==========
 
 @app.route('/api/scan/stores', methods=['GET'])
