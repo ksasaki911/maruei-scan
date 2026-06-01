@@ -540,7 +540,7 @@ def scan_ukebarai():
 
     query = """SELECT date, store_code, product_name, sell_price, cost_price,
                pos_qty, order_qty, purchase_qty, transfer_in_qty,
-               transfer_out_qty, return_qty, disposal_qty
+               transfer_out_qty, return_qty, disposal_qty, col14, col15
                FROM t_scan_ukebarai WHERE jan = %s"""
     params = [jan]
 
@@ -561,31 +561,71 @@ def scan_ukebarai():
 
 @app.route('/api/scan/zaiko', methods=['GET'])
 def scan_zaiko():
-    """JANコードの在庫データ（全店舗）"""
+    """JANコードの在庫データ（全店舗 or 指定店舗）
+    zaiko.csv外部設計(P83-02-01-06)に基づく正しいカラム対応:
+      DB.prev_stock       = CSV[6]  期首在庫（当月度の期首在庫数量＋修正数量）
+      DB.purchase_qty     = CSV[7]  仕入（当月度累計）
+      DB.pos_qty          = CSV[8]  売上（当月度累計）
+      DB.transfer_in_qty  = CSV[9]  廃棄（当月度累計）  ※カラム名は旧名のまま
+      DB.transfer_out_qty = CSV[10] 在庫修正
+      DB.theory_stock     = CSV[11] 更新在庫（最新更新在庫数）
+      DB.actual_stock     = CSV[12] 未確定（発注済未確定数）
+      DB.current_stock    = CSV[13] 前日在庫（前日末在庫数）
+      DB.col15            = CSV[14] 入荷予定
+      DB.last_purchase_date=CSV[15] 最終棚卸日
+      DB.stock_sell_amount= CSV[16] 前日在庫売価
+      DB.stock_cost_amount= CSV[17] 前日在庫原価
+    """
     jan = request.args.get('jan', '').strip()
+    store = request.args.get('store', '').strip()
 
     if not jan:
         return jsonify({'error': 'jan parameter required'}), 400
 
-    rows = query_rows("""SELECT store_code, store_name, product_name,
+    sql = """SELECT store_code, store_name, product_name,
                prev_stock, purchase_qty, pos_qty, transfer_in_qty,
                transfer_out_qty, theory_stock, actual_stock, current_stock,
-               last_purchase_date, stock_sell_amount, stock_cost_amount
-               FROM t_scan_zaiko WHERE jan = %s
-               ORDER BY store_code""", [jan])
+               col15, last_purchase_date, stock_sell_amount, stock_cost_amount
+               FROM t_scan_zaiko WHERE jan = %s"""
+    params = [jan]
+    if store:
+        sql += " AND store_code = %s"
+        params.append(store)
+    sql += " ORDER BY store_code"
+
+    rows = query_rows(sql, params)
+
+    # APIレスポンスでは外部設計の正しい名称にマッピング
+    mapped_rows = []
+    for r in rows:
+        mapped_rows.append({
+            'store_code': r['store_code'],
+            'store_name': r['store_name'],
+            'product_name': r.get('product_name', ''),
+            'kishu_stock': r.get('prev_stock', 0) or 0,           # 期首在庫
+            'purchase_qty': r.get('purchase_qty', 0) or 0,        # 仕入(月度累計)
+            'sales_qty': r.get('pos_qty', 0) or 0,                # 売上(月度累計)
+            'disposal_qty': r.get('transfer_in_qty', 0) or 0,     # 廃棄(月度累計)
+            'stock_adjust': r.get('transfer_out_qty', 0) or 0,    # 在庫修正
+            'updated_stock': r.get('theory_stock', 0) or 0,       # 更新在庫
+            'unconfirmed': r.get('actual_stock', 0) or 0,         # 未確定
+            'prev_day_stock': r.get('current_stock', 0) or 0,     # 前日在庫
+            'arrival_planned': r.get('col15', 0) or 0,            # 入荷予定
+            'last_inventory_date': r.get('last_purchase_date', ''),# 最終棚卸日
+            'stock_sell_amount': r.get('stock_sell_amount', 0) or 0,
+            'stock_cost_amount': r.get('stock_cost_amount', 0) or 0,
+        })
 
     # 全店合計
-    total = {
-        'prev_stock': 0, 'purchase_qty': 0, 'pos_qty': 0,
-        'transfer_in_qty': 0, 'transfer_out_qty': 0,
-        'theory_stock': 0, 'current_stock': 0,
-        'stock_sell_amount': 0, 'stock_cost_amount': 0
-    }
-    for r in rows:
-        for k in total:
+    sum_keys = ['kishu_stock', 'purchase_qty', 'sales_qty', 'disposal_qty',
+                'stock_adjust', 'updated_stock', 'prev_day_stock', 'arrival_planned',
+                'stock_sell_amount', 'stock_cost_amount']
+    total = {k: 0 for k in sum_keys}
+    for r in mapped_rows:
+        for k in sum_keys:
             total[k] += (r.get(k) or 0)
 
-    return jsonify({'jan': jan, 'stores': rows, 'total': total})
+    return jsonify({'jan': jan, 'stores': mapped_rows, 'total': total})
 
 
 # ========== デバッグ: 受払い生データ確認 ==========

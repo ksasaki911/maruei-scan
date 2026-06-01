@@ -327,7 +327,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
           <div class="store-tabs" id="ukeStoreTabs"></div>
           <div style="max-height:350px;overflow-y:auto">
             <table class="data-table"><thead>
-              <tr><th>日付</th><th>POS</th><th>発注</th><th>仕入</th><th>移入</th><th>移出</th><th>返品</th><th>廃棄</th></tr>
+              <tr><th>日付</th><th>売上</th><th>客数</th><th>仕入</th><th>移動</th><th>返品</th><th>廃棄</th><th>値引</th></tr>
             </thead><tbody id="ukeBody"></tbody></table>
           </div>
         </div>
@@ -336,14 +336,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <!-- 在庫タブ -->
       <div id="zaikoPanel" class="hidden">
         <div class="section-card">
-          <div class="section-title">📦 在庫状況（全店合計）</div>
+          <div class="section-title">📦 在庫状況</div>
+          <div class="store-tabs" id="zaikoStoreTabs"></div>
           <div class="zaiko-grid" id="zaikoTotal"></div>
         </div>
-        <div class="section-card">
-          <div class="section-title">🏪 店舗別在庫</div>
+        <div class="section-card" id="zaikoDetailCard">
+          <div class="section-title">🏪 店舗別在庫（当月度累計）</div>
           <div style="max-height:350px;overflow-y:auto">
             <table class="data-table"><thead>
-              <tr><th>店舗</th><th>前日在</th><th>仕入</th><th>POS</th><th>理論在</th><th>当日在</th></tr>
+              <tr><th>店舗</th><th>期首</th><th>仕入</th><th>売上</th><th>廃棄</th><th>前日在</th></tr>
             </thead><tbody id="zaikoBody"></tbody></table>
           </div>
         </div>
@@ -353,6 +354,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Hiragino Sans',sans-serif;bac
       <div id="tanawariPanel" class="hidden">
         <div class="section-card">
           <div class="section-title">🗂 棚割り情報</div>
+          <div class="store-tabs" id="tanawariStoreTabs"></div>
           <div id="tanawariContent"></div>
         </div>
       </div>
@@ -1004,68 +1006,151 @@ function renderUkeTable(store) {
   let rows = window._ukeData || [];
   if (store) rows = rows.filter(r => r.store_code === store);
   if (!rows.length) { body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--txt2);padding:12px">受払いデータなし</td></tr>'; return; }
+  // 外部設計P33: 売上数量, 買上客数, 仕入数量, 店間移動数量, 仕入返品数量, 廃棄数量, 値引金額
   body.innerHTML = rows.map(r => {
-    const d = r.date.length===8 ? r.date.substring(4,6)+'/'+r.date.substring(6,8) : r.date;
+    var d = r.date.length===8 ? r.date.substring(4,6)+'/'+r.date.substring(6,8) : r.date;
     function cellClass(v) { return v > 0 ? ' class="positive"' : (v < 0 ? ' class="negative"' : ''); }
     return '<tr><td>'+d+'</td>' +
       '<td'+cellClass(r.pos_qty)+'>'+(r.pos_qty||0)+'</td>' +
-      '<td'+cellClass(r.order_qty)+'>'+(r.order_qty||0)+'</td>' +
+      '<td>'+(r.order_qty||0)+'</td>' +
       '<td'+cellClass(r.purchase_qty)+'>'+(r.purchase_qty||0)+'</td>' +
       '<td'+cellClass(r.transfer_in_qty)+'>'+(r.transfer_in_qty||0)+'</td>' +
-      '<td'+cellClass(r.transfer_out_qty)+'>'+(r.transfer_out_qty||0)+'</td>' +
       '<td'+cellClass(r.return_qty)+'>'+(r.return_qty||0)+'</td>' +
-      '<td'+cellClass(r.disposal_qty)+'>'+(r.disposal_qty||0)+'</td></tr>';
+      '<td'+cellClass(r.disposal_qty)+'>'+(r.disposal_qty||0)+'</td>' +
+      '<td>'+(r.col14||0)+'</td></tr>';
   }).join('');
 }
 
 // ===== 在庫 =====
+var zaikoAllData = null;  // 在庫データキャッシュ
+var zaikoSelectedStore = '';
+
 function loadZaiko(jan) {
   fetch(API + '/api/scan/zaiko?jan=' + encodeURIComponent(jan))
     .then(r => r.json())
-    .then(data => displayZaiko(data))
+    .then(data => {
+      zaikoAllData = data;
+      buildZaikoStoreTabs(data);
+      displayZaiko(data, '');
+    })
     .catch(() => {});
 }
 
-function displayZaiko(data) {
-  const total = data.total || {};
-  const zg = document.getElementById('zaikoTotal');
-  function zv(v) { const n = v||0; return '<span class="zv ' + (n<0?'neg':n>0?'pos':'') + '">' + n.toLocaleString() + '</span>'; }
-  zg.innerHTML =
-    '<div class="zaiko-cell"><div class="zl">前日在庫</div>'+zv(total.prev_stock)+'</div>' +
-    '<div class="zaiko-cell"><div class="zl">仕入</div>'+zv(total.purchase_qty)+'</div>' +
-    '<div class="zaiko-cell"><div class="zl">POS販売</div>'+zv(total.pos_qty)+'</div>' +
-    '<div class="zaiko-cell"><div class="zl">理論在庫</div>'+zv(total.theory_stock)+'</div>' +
-    '<div class="zaiko-cell"><div class="zl">当日在庫</div>'+zv(total.current_stock)+'</div>' +
-    '<div class="zaiko-cell"><div class="zl">在庫金額(原価)</div><span class="zv">¥'+(total.stock_cost_amount||0).toLocaleString()+'</span></div>';
+function buildZaikoStoreTabs(data) {
+  var stores = data.stores || [];
+  var tabs = document.getElementById('zaikoStoreTabs');
+  var storeMap = {};
+  stores.forEach(function(r) {
+    if (!storeMap[r.store_code]) storeMap[r.store_code] = (r.store_name||'').replace(/　+/g,'').trim();
+  });
+  var html = '<button class="store-tab active" onclick="selectZaikoStore(\'\')">全店</button>';
+  Object.keys(storeMap).sort().forEach(function(code) {
+    html += '<button class="store-tab" onclick="selectZaikoStore(\''+code+'\')">' + storeMap[code] + '</button>';
+  });
+  tabs.innerHTML = html;
+}
 
-  const body = document.getElementById('zaikoBody');
-  const stores = data.stores || [];
+function selectZaikoStore(code) {
+  zaikoSelectedStore = code;
+  document.querySelectorAll('#zaikoStoreTabs .store-tab').forEach(function(b, i) {
+    b.classList.toggle('active', code === '' ? i === 0 : b.textContent !== '全店' && b.onclick.toString().indexOf("'"+code+"'") >= 0);
+  });
+  // 全店の場合はキャッシュデータ、店舗指定はフィルタ
+  if (!code) {
+    displayZaiko(zaikoAllData, '');
+  } else {
+    var filtered = (zaikoAllData.stores || []).filter(function(r) { return r.store_code === code; });
+    var total = {};
+    var sumKeys = ['kishu_stock','purchase_qty','sales_qty','disposal_qty','stock_adjust','updated_stock','prev_day_stock','arrival_planned','stock_sell_amount','stock_cost_amount'];
+    sumKeys.forEach(function(k) { total[k] = 0; });
+    filtered.forEach(function(r) { sumKeys.forEach(function(k) { total[k] += (r[k]||0); }); });
+    displayZaiko({stores: filtered, total: total}, code);
+  }
+}
+
+function displayZaiko(data, storeFilter) {
+  var total = data.total || {};
+  var zg = document.getElementById('zaikoTotal');
+  function zv(v) { var n = v||0; return '<span class="zv ' + (n<0?'neg':n>0?'pos':'') + '">' + n.toLocaleString() + '</span>'; }
+
+  // 外部設計P35に基づく正しいラベル
+  zg.innerHTML =
+    '<div class="zaiko-cell"><div class="zl">期首在庫</div>'+zv(total.kishu_stock)+'</div>' +
+    '<div class="zaiko-cell"><div class="zl">仕入累計</div>'+zv(total.purchase_qty)+'</div>' +
+    '<div class="zaiko-cell"><div class="zl">売上累計</div>'+zv(total.sales_qty)+'</div>' +
+    '<div class="zaiko-cell"><div class="zl">廃棄累計</div>'+zv(total.disposal_qty)+'</div>' +
+    '<div class="zaiko-cell"><div class="zl">前日在庫</div>'+zv(total.prev_day_stock)+'</div>' +
+    '<div class="zaiko-cell"><div class="zl">在庫原価</div><span class="zv">¥'+(total.stock_cost_amount||0).toLocaleString()+'</span></div>';
+
+  var detailCard = document.getElementById('zaikoDetailCard');
+  if (storeFilter) {
+    detailCard.classList.add('hidden');
+    return;
+  }
+  detailCard.classList.remove('hidden');
+
+  var body = document.getElementById('zaikoBody');
+  var stores = data.stores || [];
   if (!stores.length) { body.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--txt2);padding:12px">在庫データなし</td></tr>'; return; }
-  body.innerHTML = stores.map(r => {
+  body.innerHTML = stores.map(function(r) {
     function cellClass(v) { return v < 0 ? ' class="negative"' : (v > 0 ? ' class="positive"' : ''); }
-    const sn = (r.store_name||'').replace(/　+/g,'').trim();
+    var sn = (r.store_name||'').replace(/　+/g,'').trim();
     return '<tr><td>'+sn+'</td>' +
-      '<td'+cellClass(r.prev_stock)+'>'+(r.prev_stock||0)+'</td>' +
+      '<td'+cellClass(r.kishu_stock)+'>'+(r.kishu_stock||0)+'</td>' +
       '<td'+cellClass(r.purchase_qty)+'>'+(r.purchase_qty||0)+'</td>' +
-      '<td'+cellClass(r.pos_qty)+'>'+(r.pos_qty||0)+'</td>' +
-      '<td'+cellClass(r.theory_stock)+'>'+(r.theory_stock||0)+'</td>' +
-      '<td'+cellClass(r.current_stock)+'>'+(r.current_stock||0)+'</td></tr>';
+      '<td'+cellClass(r.sales_qty)+'>'+(r.sales_qty||0)+'</td>' +
+      '<td'+cellClass(r.disposal_qty)+'>'+(r.disposal_qty||0)+'</td>' +
+      '<td'+cellClass(r.prev_day_stock)+'>'+(r.prev_day_stock||0)+'</td></tr>';
   }).join('');
 }
 
 // ===== 棚割り =====
+var tanawariAllData = null;
+var tanawariSelectedStore = '';
+
 function loadTanawari(jan) {
   fetch(API + '/api/scan/tanawari?jan=' + encodeURIComponent(jan))
-    .then(r => r.json()).then(data => { renderTanawari(data); })
+    .then(r => r.json()).then(data => {
+      tanawariAllData = data;
+      buildTanawariStoreTabs(data);
+      renderTanawari(data, '');
+    })
     .catch(e => {
       document.getElementById('tanawariContent').innerHTML =
         '<div style="text-align:center;color:var(--txt2);padding:20px">棚割りデータ取得エラー</div>';
     });
 }
 
-function renderTanawari(data) {
-  const ct = document.getElementById('tanawariContent');
-  const rows = data.data || [];
+function buildTanawariStoreTabs(data) {
+  var rows = data.data || [];
+  var tabs = document.getElementById('tanawariStoreTabs');
+  var storeMap = {};
+  rows.forEach(function(r) {
+    if (!storeMap[r.store_code]) storeMap[r.store_code] = (r.store_name||r.store_code||'').replace(/　+/g,'').trim();
+  });
+  var html = '<button class="store-tab active" onclick="selectTanawariStore(\'\')">全店</button>';
+  Object.keys(storeMap).sort().forEach(function(code) {
+    html += '<button class="store-tab" onclick="selectTanawariStore(\''+code+'\')">' + storeMap[code] + '</button>';
+  });
+  tabs.innerHTML = html;
+}
+
+function selectTanawariStore(code) {
+  tanawariSelectedStore = code;
+  document.querySelectorAll('#tanawariStoreTabs .store-tab').forEach(function(b, i) {
+    b.classList.toggle('active', code === '' ? i === 0 : b.onclick.toString().indexOf("'"+code+"'") >= 0);
+  });
+  if (!code) {
+    renderTanawari(tanawariAllData, '');
+  } else {
+    var filtered = (tanawariAllData.data || []).filter(function(r) { return r.store_code === code; });
+    renderTanawari({data: filtered}, code);
+  }
+}
+
+function renderTanawari(data, storeFilter) {
+  var ct = document.getElementById('tanawariContent');
+  var rows = data.data || [];
   if (!rows.length) {
     ct.innerHTML = '<div style="text-align:center;color:var(--txt2);padding:20px">棚割りデータなし</div>';
     return;
@@ -1074,15 +1159,18 @@ function renderTanawari(data) {
   var byStore = {};
   rows.forEach(function(r) {
     var key = r.store_code;
-    if (!byStore[key]) byStore[key] = { name: r.store_name, rows: [] };
+    if (!byStore[key]) byStore[key] = { name: (r.store_name||r.store_code||''), rows: [] };
     byStore[key].rows.push(r);
   });
 
   var html = '';
   Object.keys(byStore).sort().forEach(function(sc) {
     var g = byStore[sc];
-    html += '<div style="margin-bottom:12px">';
-    html += '<div style="font-weight:700;font-size:13px;padding:6px 0;border-bottom:2px solid var(--primary);margin-bottom:4px">🏪 ' + g.name + '</div>';
+    // 店舗フィルター時はヘッダー不要
+    if (!storeFilter) {
+      html += '<div style="margin-bottom:12px">';
+      html += '<div style="font-weight:700;font-size:14px;padding:8px 0;border-bottom:2px solid var(--pri);margin-bottom:4px">🏪 ' + g.name + '</div>';
+    }
     html += '<div style="overflow-x:auto"><table class="data-table"><thead>';
     html += '<tr><th>ゴンドラ</th><th>棚段</th><th>位置</th><th>フェイス</th><th>仕入先</th><th>原価</th><th>売価</th><th>値入率</th></tr>';
     html += '</thead><tbody>';
@@ -1094,12 +1182,13 @@ function renderTanawari(data) {
         '<td>' + (r.shelf_no || '-') + '</td>' +
         '<td>' + (r.position || '-') + '</td>' +
         '<td style="text-align:center;font-weight:700">' + (r.face_count || 0) + '</td>' +
-        '<td style="font-size:11px">' + (r.supplier_name || '-') + '</td>' +
+        '<td style="font-size:12px">' + (r.supplier_name || '-') + '</td>' +
         '<td>¥' + (r.cost || 0).toLocaleString() + '</td>' +
         '<td>¥' + (r.sell_price || 0).toLocaleString() + '</td>' +
         '<td>' + mr + '</td></tr>';
     });
-    html += '</tbody></table></div></div>';
+    html += '</tbody></table></div>';
+    if (!storeFilter) html += '</div>';
   });
   ct.innerHTML = html;
 }
