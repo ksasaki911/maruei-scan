@@ -1044,7 +1044,7 @@ function buildZaikoStoreTabs(data) {
     if (!storeMap[r.store_code]) storeMap[r.store_code] = (r.store_name||'').replace(/　+/g,'').trim();
   });
   var html = '<button class="store-tab active" onclick="selectZaikoStore(\'\')">全店</button>';
-  Object.keys(storeMap).sort().forEach(function(code) {
+  Object.keys(storeMap).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(code) {
     html += '<button class="store-tab" onclick="selectZaikoStore(\''+code+'\')">' + storeMap[code] + '</button>';
   });
   tabs.innerHTML = html;
@@ -1129,7 +1129,7 @@ function buildTanawariStoreTabs(data) {
     if (!storeMap[r.store_code]) storeMap[r.store_code] = (r.store_name||r.store_code||'').replace(/　+/g,'').trim();
   });
   var html = '<button class="store-tab active" onclick="selectTanawariStore(\'\')">全店</button>';
-  Object.keys(storeMap).sort().forEach(function(code) {
+  Object.keys(storeMap).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(code) {
     html += '<button class="store-tab" onclick="selectTanawariStore(\''+code+'\')">' + storeMap[code] + '</button>';
   });
   tabs.innerHTML = html;
@@ -1164,7 +1164,7 @@ function renderTanawari(data, storeFilter) {
   });
 
   var html = '';
-  Object.keys(byStore).sort().forEach(function(sc) {
+  Object.keys(byStore).sort(function(a,b){return Number(a)-Number(b);}).forEach(function(sc) {
     var g = byStore[sc];
     // 店舗フィルター時はヘッダー不要
     if (!storeFilter) {

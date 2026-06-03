@@ -591,7 +591,7 @@ def scan_zaiko():
     if store:
         sql += " AND store_code = %s"
         params.append(store)
-    sql += " ORDER BY store_code"
+    sql += " ORDER BY store_code::int"
 
     rows = query_rows(sql, params)
 
@@ -693,7 +693,7 @@ def scan_tanawari():
                product_name, face_count, edp, dept_name, sub_dept_name,
                supplier_code, supplier_name, cost, sell_price, margin_rate
                FROM t_scan_tanawari WHERE jan = %s
-               ORDER BY store_code, gondola_no, shelf_no, position""", [jan])
+               ORDER BY store_code::int, gondola_no, shelf_no, position""", [jan])
 
     for r in rows:
         r['store_name'] = STORE_NAMES.get(r['store_code'], '店舗' + str(r['store_code']))
