@@ -232,10 +232,12 @@ STORE_NAMES = {
 # ========== ヘルスチェック + 自動同期トリガー ==========
 
 def _check_and_trigger_sync():
-    """今日の同期がまだ完了していなければバックグラウンドで同期開始"""
+    """今日の同期がまだ完了していなければバックグラウンドで同期開始
+    メモリ上のステータスだけでなくDBの更新日時も確認（再起動対策）"""
     from datetime import timezone, timedelta
     JST = timezone(timedelta(hours=9))
     now_jst = datetime.now(JST)
+    today_str = now_jst.strftime('%Y-%m-%d')
 
     # 指定時刻前なら何もしない
     if now_jst.hour < DAILY_SYNC_HOUR_JST:
@@ -245,13 +247,20 @@ def _check_and_trigger_sync():
     if _ftp_sync_status['running']:
         return 'already_running'
 
-    # 今日既に成功済みか確認（last_resultのfinished_atが今日ならスキップ）
+    # メモリ上のステータスで今日完了済みか確認
     last = _ftp_sync_status.get('last_result')
-    if last and last.get('success') and last.get('finished_at'):
-        finished = last['finished_at'][:10]  # 'YYYY-MM-DD'
-        today_str = now_jst.strftime('%Y-%m-%d')
-        if finished == today_str:
-            return 'already_done_today'
+    if last and last.get('success') and last.get('finished_at', '')[:10] == today_str:
+        return 'already_done_today'
+
+    # DB上の更新日時を確認（アプリ再起動でメモリが失われた場合の保険）
+    try:
+        zaiko_check = query_one("SELECT MAX(updated_at) as last_update FROM t_scan_zaiko")
+        if zaiko_check and zaiko_check.get('last_update'):
+            last_date = str(zaiko_check['last_update'])[:10]
+            if last_date >= today_str:
+                return 'already_done_today_db'
+    except Exception:
+        pass
 
     # 同期開始
     print(f"[自動同期] /health トリガーで同期開始 ({now_jst.strftime('%Y-%m-%d %H:%M')})", flush=True)
@@ -591,7 +600,7 @@ def scan_zaiko():
     if store:
         sql += " AND store_code = %s"
         params.append(store)
-    sql += " ORDER BY store_code::int"
+    sql += " ORDER BY CASE WHEN store_code ~ '^[0-9]+$' THEN store_code::int ELSE 9999 END"
 
     rows = query_rows(sql, params)
 
@@ -1231,43 +1240,58 @@ def get_ftp_sync_status():
 DAILY_SYNC_HOUR_JST = 8  # 日本時間 午前8時に自動同期（FTPデータ更新6-7時の後）
 
 def _daily_sync_scheduler():
-    """毎日指定時刻(JST)にFTP同期を自動実行するバックグラウンドスレッド"""
+    """毎日指定時刻(JST)にFTP同期を自動実行するバックグラウンドスレッド
+    ローカル変数ではなくDBの更新日時を確認（アプリ再起動対策）"""
     import time
     from datetime import timezone, timedelta
     JST = timezone(timedelta(hours=9))
 
-    # 起動直後は少し待ってから開始
-    time.sleep(10)
+    # _safe_initが先に完了するよう余裕を持って待つ
+    time.sleep(30)
     print(f"[日次同期] スケジューラー起動 (毎日 JST {DAILY_SYNC_HOUR_JST}:00 に実行)", flush=True)
-
-    last_sync_date = None
 
     while True:
         try:
             now_jst = datetime.now(JST)
             today_str = now_jst.strftime('%Y-%m-%d')
 
-            # 今日の同期がまだで、指定時刻を過ぎていれば実行
-            if now_jst.hour >= DAILY_SYNC_HOUR_JST and last_sync_date != today_str:
-                # 既に手動同期が実行中なら待つ
+            if now_jst.hour >= DAILY_SYNC_HOUR_JST:
+                # 既に実行中なら待つ
                 if _ftp_sync_status['running']:
                     print(f"[日次同期] 同期実行中のためスキップ、60秒後に再確認", flush=True)
                     time.sleep(60)
                     continue
 
-                print(f"[日次同期] {today_str} の自動同期を開始します", flush=True)
-                _ftp_sync_status['log'] = []  # ログクリア
-                try:
-                    _run_ftp_sync()
-                    last_sync_date = today_str
-                    result = _ftp_sync_status.get('last_result', {})
-                    if result.get('success'):
-                        print(f"[日次同期] 完了: 商品{result.get('scan_products',0)} POS{result.get('scan_pos',0)} 受払{result.get('scan_ukebarai',0)} 在庫{result.get('scan_zaiko',0)}", flush=True)
-                    else:
-                        print(f"[日次同期] エラー: {result.get('error','不明')}", flush=True)
-                except Exception as e:
-                    print(f"[日次同期] 実行エラー: {e}", flush=True)
-                    last_sync_date = today_str  # エラーでも今日は再試行しない
+                # メモリ上のステータスで今日完了済みか確認
+                sync_needed = True
+                last = _ftp_sync_status.get('last_result')
+                if last and last.get('success') and last.get('finished_at', '')[:10] == today_str:
+                    sync_needed = False
+
+                # DBの更新日時でも確認（メモリが失われた場合の保険）
+                if sync_needed:
+                    try:
+                        zaiko_check = query_one("SELECT MAX(updated_at) as last_update FROM t_scan_zaiko")
+                        if zaiko_check and zaiko_check.get('last_update'):
+                            last_date = str(zaiko_check['last_update'])[:10]
+                            if last_date >= today_str:
+                                sync_needed = False
+                                print(f"[日次同期] DB確認: 今日の同期完了済み ({last_date})", flush=True)
+                    except Exception:
+                        pass
+
+                if sync_needed:
+                    print(f"[日次同期] {today_str} の自動同期を開始します", flush=True)
+                    _ftp_sync_status['log'] = []
+                    try:
+                        _run_ftp_sync()
+                        result = _ftp_sync_status.get('last_result', {})
+                        if result.get('success'):
+                            print(f"[日次同期] 完了: 商品{result.get('scan_products',0)} POS{result.get('scan_pos',0)} 受払{result.get('scan_ukebarai',0)} 在庫{result.get('scan_zaiko',0)}", flush=True)
+                        else:
+                            print(f"[日次同期] エラー: {result.get('error','不明')}", flush=True)
+                    except Exception as e:
+                        print(f"[日次同期] 実行エラー: {e}", flush=True)
 
             # 次のチェックまで10分待機
             time.sleep(600)
@@ -1314,14 +1338,31 @@ def _safe_init():
             print(f"[初期化エラー] 再試行も失敗: {e2}", flush=True)
             return
 
-    # 起動時に商品マスタが空なら自動FTP同期
+    # 起動時の同期チェック: DBが空 OR 今日の同期が未完了なら自動実行
+    from datetime import timezone, timedelta
+    JST = timezone(timedelta(hours=9))
+    now_jst = datetime.now(JST)
     try:
         result = query_one("SELECT COUNT(*) as cnt FROM t_scan_products")
         if result and result['cnt'] == 0:
             print("[自動同期] DBが空のためFTP同期を自動実行します", flush=True)
             _run_ftp_sync()
         else:
-            print(f"[自動同期] 商品 {result['cnt']} 件存在 → スキップ", flush=True)
+            print(f"[自動同期] 商品 {result['cnt']} 件存在", flush=True)
+            # 同期予定時刻(JST)以降で今日の同期が未完了なら自動実行
+            if now_jst.hour >= DAILY_SYNC_HOUR_JST:
+                zaiko_check = query_one("SELECT MAX(updated_at) as last_update FROM t_scan_zaiko")
+                last_date = ''
+                if zaiko_check and zaiko_check.get('last_update'):
+                    last_date = str(zaiko_check['last_update'])[:10]
+                today_str = now_jst.strftime('%Y-%m-%d')
+                if last_date < today_str:
+                    print(f"[自動同期] 今日の同期未完了 (最終: {last_date or '不明'}) → 起動時同期開始", flush=True)
+                    _run_ftp_sync()
+                else:
+                    print(f"[自動同期] 今日の同期完了済み ({last_date})", flush=True)
+            else:
+                print(f"[自動同期] 同期予定時刻前 (現在JST {now_jst.hour}時 / 予定{DAILY_SYNC_HOUR_JST}時)", flush=True)
     except Exception as e:
         print(f"[自動同期エラー] {e}", flush=True)
 

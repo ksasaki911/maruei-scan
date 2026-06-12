@@ -929,6 +929,7 @@ function loadHistory(jan) {
   let url = API + '/api/scan/history?jan=' + encodeURIComponent(jan);
   if (store) url += '&store=' + store;
   fetch(url).then(r => r.json()).then(data => {
+    window._originalWeekly = data.weekly || [];
     displayWeekly(data.weekly || []);
     displayDaily(data.detail || [], data.daily || [], data.store_names || {});
   }).catch(() => {});
@@ -960,6 +961,36 @@ function filterDailyStore(el, store) {
   el.parentNode.querySelectorAll('.store-tab').forEach(t => t.classList.remove('active'));
   el.classList.add('active');
   renderDailyTable(store);
+  recalcWeekly(store);
+}
+
+function recalcWeekly(store) {
+  // 全店の場合はAPIから取得したオリジナル週別データを表示
+  if (!store) {
+    displayWeekly(window._originalWeekly || []);
+    return;
+  }
+  // 店舗指定の場合は詳細データからその店舗の週別を再計算
+  var detail = (window._dailyDetail || []).filter(function(r) { return r.store_code === store; });
+  var daily = {};
+  detail.forEach(function(r) {
+    var d = r.date;
+    if (!daily[d]) daily[d] = {qty: 0, amount: 0};
+    daily[d].qty += (r.sales_qty || 0);
+    daily[d].amount += (r.sales_amount || 0);
+  });
+  var dates = Object.keys(daily).sort().reverse();
+  var weekly = [];
+  for (var i = 0; i < Math.min(dates.length, 28); i += 7) {
+    var wk = {week: weekly.length + 1, qty: 0, amount: 0, days: 0};
+    for (var j = i; j < Math.min(i + 7, dates.length); j++) {
+      wk.qty += daily[dates[j]].qty;
+      wk.amount += daily[dates[j]].amount;
+      wk.days++;
+    }
+    weekly.push(wk);
+  }
+  displayWeekly(weekly);
 }
 
 function renderDailyTable(store) {
@@ -1026,14 +1057,26 @@ var zaikoAllData = null;  // 在庫データキャッシュ
 var zaikoSelectedStore = '';
 
 function loadZaiko(jan) {
+  // 読込中表示
+  document.getElementById('zaikoTotal').innerHTML =
+    '<div style="grid-column:1/-1;text-align:center;padding:16px;color:var(--txt2)">在庫データ読込中...</div>';
+  document.getElementById('zaikoBody').innerHTML = '';
+
   fetch(API + '/api/scan/zaiko?jan=' + encodeURIComponent(jan))
-    .then(r => r.json())
-    .then(data => {
+    .then(function(r) {
+      if (!r.ok) throw new Error('APIエラー: ' + r.status);
+      return r.json();
+    })
+    .then(function(data) {
       zaikoAllData = data;
       buildZaikoStoreTabs(data);
       displayZaiko(data, '');
     })
-    .catch(() => {});
+    .catch(function(e) {
+      console.error('zaiko load error:', e);
+      document.getElementById('zaikoTotal').innerHTML =
+        '<div style="grid-column:1/-1;text-align:center;padding:16px;color:#c62828">在庫データの取得に失敗しました<br><small>' + e.message + '</small></div>';
+    });
 }
 
 function buildZaikoStoreTabs(data) {
